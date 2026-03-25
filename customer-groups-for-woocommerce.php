@@ -4,6 +4,7 @@
  * Description: Implements custom customer groups and pricing tiers for WooCommerce.
  * Version: 1.1.0
  * Author: CueFox
+ * GitHub Plugin URI: NichlasB/customer-groups-for-woocommerce
  * Text Domain: wccg
  * Domain Path: /languages
  * Requires at least: 5.8
