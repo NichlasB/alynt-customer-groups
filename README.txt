@@ -4,7 +4,7 @@ Tags: woocommerce, customer groups, pricing, discounts, wholesale
 Requires at least: 5.8
 Tested up to: 6.3
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 5.0
@@ -120,6 +120,13 @@ The plugin includes:
 * Performance logging
 
 == Changelog ==
+
+= 1.1.0 =
+* Add default group functionality for ungrouped customers
+* Add scheduling functionality for pricing rules
+* Enhance variable product pricing functionality
+* Add pricing rule edit modal for better UX
+* Add auto-expiration for pricing rules via cron
 
 = 1.0.0 =
 * Initial release

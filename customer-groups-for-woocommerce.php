@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Customer Groups for WooCommerce
  * Description: Implements custom customer groups and pricing tiers for WooCommerce.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: CueFox
  * Text Domain: wccg
  * Domain Path: /languages
