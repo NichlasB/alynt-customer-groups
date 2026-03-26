@@ -17,15 +17,15 @@
  * WC tested up to: 8.0
  */
 
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
-define('WCCG_VERSION', '1.1.0');
-define('WCCG_FILE', __FILE__);
-define('WCCG_PATH', plugin_dir_path(WCCG_FILE));
-define('WCCG_URL', plugin_dir_url(WCCG_FILE));
-define('WCCG_BASENAME', plugin_basename(WCCG_FILE));
+define( 'WCCG_VERSION', '1.1.0' );
+define( 'WCCG_FILE', __FILE__ );
+define( 'WCCG_PATH', plugin_dir_path( WCCG_FILE ) );
+define( 'WCCG_URL', plugin_dir_url( WCCG_FILE ) );
+define( 'WCCG_BASENAME', plugin_basename( WCCG_FILE ) );
 
 require_once WCCG_PATH . 'includes/class-activator.php';
 require_once WCCG_PATH . 'includes/class-deactivator.php';
@@ -50,91 +50,91 @@ require_once WCCG_PATH . 'includes/class-core.php';
  * @since   1.0.0
  */
 final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
-    private static $instance = null;
-    private $bootstrap;
-    private $dependencies;
+	private static $instance = null;
+	private $bootstrap;
+	private $dependencies;
 
-    /**
-     * Return the singleton instance of this class.
-     *
-     * @since  1.0.0
-     * @return WCCG_Customer_Groups
-     */
-    public static function instance() {
-        if (is_null(self::$instance)) {
-            self::$instance = new self();
-        }
+	/**
+	 * Return the singleton instance of this class.
+	 *
+	 * @since  1.0.0
+	 * @return WCCG_Customer_Groups
+	 */
+	public static function instance() {
+		if ( is_null( self::$instance ) ) {
+			self::$instance = new self();
+		}
 
-        return self::$instance;
-    }
+		return self::$instance;
+	}
 
-    private function __construct() {
-        $this->bootstrap = WCCG_Plugin_Bootstrap::instance();
-        $this->dependencies = WCCG_Plugin_Dependencies::instance();
-        $this->dependencies->schedule_upgrade_check();
-        $this->bootstrap->register($this);
-    }
+	private function __construct() {
+		$this->bootstrap    = WCCG_Plugin_Bootstrap::instance();
+		$this->dependencies = WCCG_Plugin_Dependencies::instance();
+		$this->dependencies->schedule_upgrade_check();
+		$this->bootstrap->register( $this );
+	}
 
-    /**
-     * Check whether all plugin dependencies (PHP, WP, WooCommerce versions) are met.
-     *
-     * @since  1.0.0
-     * @return bool True if all dependencies pass, false otherwise.
-     */
-    public function check_dependencies() {
-        return $this->bootstrap->check_dependencies();
-    }
+	/**
+	 * Check whether all plugin dependencies (PHP, WP, WooCommerce versions) are met.
+	 *
+	 * @since  1.0.0
+	 * @return bool True if all dependencies pass, false otherwise.
+	 */
+	public function check_dependencies() {
+		return $this->bootstrap->check_dependencies();
+	}
 
-    /**
-     * Load the plugin text domain for translations.
-     *
-     * @since  1.0.0
-     * @return void
-     */
-    public function load_textdomain() {
-        $this->bootstrap->load_textdomain();
-    }
+	/**
+	 * Load the plugin text domain for translations.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	public function load_textdomain() {
+		$this->bootstrap->load_textdomain();
+	}
 
-    /**
-     * Initialize core plugin components after dependency checks pass.
-     *
-     * @since  1.0.0
-     * @return void
-     */
-    public function init_plugin() {
-        $this->bootstrap->init_plugin();
-    }
+	/**
+	 * Initialize core plugin components after dependency checks pass.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	public function init_plugin() {
+		$this->bootstrap->init_plugin();
+	}
 
-    /**
-     * Register custom WP-Cron intervals.
-     *
-     * @since  1.1.0
-     * @param  array $schedules Existing cron schedule definitions.
-     * @return array Modified schedules including the wccg_five_minutes interval.
-     */
-    public function add_cron_schedules($schedules) {
-        return $this->bootstrap->add_cron_schedules($schedules);
-    }
+	/**
+	 * Register custom WP-Cron intervals.
+	 *
+	 * @since  1.1.0
+	 * @param  array $schedules Existing cron schedule definitions.
+	 * @return array Modified schedules including the wccg_five_minutes interval.
+	 */
+	public function add_cron_schedules( $schedules ) {
+		return $this->bootstrap->add_cron_schedules( $schedules );
+	}
 
-    /**
-     * Run early init tasks hooked to WordPress 'init'.
-     *
-     * @since  1.0.0
-     * @return void
-     */
-    public function init() {
-        $this->bootstrap->init();
-    }
+	/**
+	 * Run early init tasks hooked to WordPress 'init'.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	public function init() {
+		$this->bootstrap->init();
+	}
 
-    /**
-     * Execute scheduled database cleanup tasks.
-     *
-     * @since  1.0.0
-     * @return void
-     */
-    public function run_cleanup_tasks() {
-        $this->bootstrap->run_cleanup_tasks();
-    }
+	/**
+	 * Execute scheduled database cleanup tasks.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	public function run_cleanup_tasks() {
+		$this->bootstrap->run_cleanup_tasks();
+	}
 }
 
 /**
@@ -144,10 +144,10 @@ final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
  * @return WCCG_Customer_Groups
  */
 function WCCG() {
-    return WCCG_Customer_Groups::instance();
+	return WCCG_Customer_Groups::instance();
 }
 
-register_activation_hook(WCCG_FILE, array('WCCG_Activator', 'activate'));
-register_deactivation_hook(WCCG_FILE, array('WCCG_Deactivator', 'deactivate'));
+register_activation_hook( WCCG_FILE, array( 'WCCG_Activator', 'activate' ) );
+register_deactivation_hook( WCCG_FILE, array( 'WCCG_Deactivator', 'deactivate' ) );
 
 WCCG();

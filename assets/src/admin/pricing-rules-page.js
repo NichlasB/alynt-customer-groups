@@ -5,6 +5,23 @@ export function initPricingRulesPage($) {
         return;
     }
 
+    const getFriendlyError = (jqXHR, fallbackMessage) => {
+        if (jqXHR && jqXHR.status === 403) {
+            return strings.session_expired || 'Your session has expired. Reload the page and try again.';
+        }
+
+        if (jqXHR && jqXHR.statusText === 'timeout') {
+            return strings.request_timeout || 'The request took too long. Please try again.';
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            return strings.network_error || 'Connection lost. Check your internet connection and try again.';
+        }
+
+        const responseMessage = jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message;
+        return responseMessage || fallbackMessage || strings.generic_request_error || 'Something unexpected happened. Please try again.';
+    };
+
     $('#discount_value').off('input.wccg').on('input.wccg', function() {
         const value = parseFloat($(this).val());
         const type = $('#discount_type').val();
@@ -31,11 +48,12 @@ export function initPricingRulesPage($) {
 
         const ruleId = $toggle.data('rule-id');
         const newStatus = $toggle.prop('checked') ? 1 : 0;
-        $toggle.data('is-updating', true).prop('disabled', true);
+        $toggle.data('is-updating', true).prop('disabled', true).attr('aria-busy', 'true');
 
         $.ajax({
             url: wccg_pricing_rules.ajax_url,
             type: 'POST',
+            timeout: 15000,
             data: {
                 action: 'wccg_toggle_pricing_rule',
                 nonce: wccg_pricing_rules.nonce,
@@ -44,7 +62,7 @@ export function initPricingRulesPage($) {
             },
             success(response) {
                 if (!response.success) {
-                    alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
+                    alert(response.data && response.data.message ? response.data.message : (strings.failed_update_rule_status || 'Could not update the rule status. Please try again.'));
                     $toggle.data('programmatic-change', true).prop('checked', !$toggle.prop('checked'));
                     return;
                 }
@@ -79,12 +97,12 @@ export function initPricingRulesPage($) {
                     }
                 }
             },
-            error() {
-                alert(strings.failed_update_rule_status || 'Failed to update rule status. Please try again.');
+            error(jqXHR, textStatus) {
+                alert(getFriendlyError({ ...jqXHR, statusText: textStatus }, strings.failed_update_rule_status || 'Could not update the rule status. Please try again.'));
                 $toggle.data('programmatic-change', true).prop('checked', !$toggle.prop('checked'));
             },
             complete() {
-                $toggle.data('is-updating', false).prop('disabled', false);
+                $toggle.data('is-updating', false).prop('disabled', false).removeAttr('aria-busy');
             }
         });
     });
@@ -99,11 +117,12 @@ export function initPricingRulesPage($) {
         const $button = $(this);
         const originalText = $button.text();
         const status = disable ? 0 : 1;
-        $button.prop('disabled', true).text(disable ? (strings.disabling || 'Disabling...') : (strings.enabling || 'Enabling...'));
+        $button.prop('disabled', true).text(disable ? (strings.disabling || 'Disabling...') : (strings.enabling || 'Enabling...')).attr('aria-busy', 'true');
 
         $.ajax({
             url: wccg_pricing_rules.ajax_url,
             type: 'POST',
+            timeout: 15000,
             data: {
                 action: 'wccg_bulk_toggle_pricing_rules',
                 nonce: wccg_pricing_rules.nonce,
@@ -116,14 +135,15 @@ export function initPricingRulesPage($) {
                     });
                     alert(response.data.message);
                 } else {
-                    alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
+                    alert(response.data && response.data.message ? response.data.message : (strings.generic_request_error || 'Something unexpected happened. Please try again.'));
                 }
             },
-            error() {
-                alert(status ? (strings.failed_enable_pricing || 'Failed to enable pricing rules. Please try again.') : (strings.failed_disable_pricing || 'Failed to disable pricing rules. Please try again.'));
+            error(jqXHR, textStatus) {
+                const fallback = status ? (strings.failed_enable_pricing || 'Could not enable the pricing rules. Please try again.') : (strings.failed_disable_pricing || 'Could not disable the pricing rules. Please try again.');
+                alert(getFriendlyError({ ...jqXHR, statusText: textStatus }, fallback));
             },
             complete() {
-                $button.prop('disabled', false).text(originalText);
+                $button.prop('disabled', false).text(originalText).removeAttr('aria-busy');
             }
         });
     });
@@ -138,10 +158,11 @@ export function initPricingRulesPage($) {
         }
 
         const $button = $(this);
-        $button.prop('disabled', true).text(strings.deleting || 'Deleting...');
+        $button.prop('disabled', true).text(strings.deleting || 'Deleting...').attr('aria-busy', 'true');
         $.ajax({
             url: wccg_pricing_rules.ajax_url,
             type: 'POST',
+            timeout: 15000,
             data: {
                 action: 'wccg_delete_all_pricing_rules',
                 nonce: wccg_pricing_rules.nonce
@@ -152,12 +173,12 @@ export function initPricingRulesPage($) {
                     location.reload();
                     return;
                 }
-                alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
-                $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules');
+                alert(response.data && response.data.message ? response.data.message : (strings.failed_delete_pricing || 'Could not delete the pricing rules. Please try again.'));
+                $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules').removeAttr('aria-busy');
             },
-            error() {
-                alert(strings.failed_delete_pricing || 'Failed to delete pricing rules. Please try again.');
-                $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules');
+            error(jqXHR, textStatus) {
+                alert(getFriendlyError({ ...jqXHR, statusText: textStatus }, strings.failed_delete_pricing || 'Could not delete the pricing rules. Please try again.'));
+                $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules').removeAttr('aria-busy');
             }
         });
     });

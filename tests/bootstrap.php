@@ -18,4 +18,4 @@ define( 'WCCG_URL', 'http://example.test/wp-content/plugins/alynt-customer-group
 define( 'WCCG_BASENAME', 'alynt-customer-groups/alynt-customer-groups.php' );
 
 require_once WCCG_TESTS_PATH . '/vendor/autoload.php';
-require_once WCCG_TESTS_PATH . '/includes/class-autoloader.php';
+require_once WCCG_TESTS_PATH . '/includes/class-wccg-autoloader.php';

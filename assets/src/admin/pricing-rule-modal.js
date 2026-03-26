@@ -5,6 +5,23 @@ export function initPricingRuleModal($) {
 
     const getFocusableElements = () => $modal.find('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])').filter(':visible:not([disabled])');
 
+    const getFriendlyError = (jqXHR, fallbackMessage) => {
+        if (jqXHR && jqXHR.status === 403) {
+            return strings.session_expired || 'Your session has expired. Reload the page and try again.';
+        }
+
+        if (jqXHR && jqXHR.statusText === 'timeout') {
+            return strings.request_timeout || 'The request took too long. Please try again.';
+        }
+
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            return strings.network_error || 'Connection lost. Check your internet connection and try again.';
+        }
+
+        const responseMessage = jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message;
+        return responseMessage || fallbackMessage || strings.generic_request_error || 'Something unexpected happened. Please try again.';
+    };
+
     const setStatusMessage = (type, message) => {
         const $message = $modal.find('.wccg-modal-message');
         $message.attr('role', type === 'error' ? 'alert' : 'status');
@@ -20,7 +37,8 @@ export function initPricingRuleModal($) {
         });
         $('body').removeClass('wccg-modal-open');
         $modal.find('.wccg-modal-message').attr('role', 'status').html('');
-        $modal.find('.wccg-modal-save').prop('disabled', false).text(strings.save_changes || 'Save Changes');
+        $modal.find('.wccg-modal-save').prop('disabled', false).text(strings.save_changes || 'Save Changes').removeAttr('aria-busy');
+        $modal.removeAttr('aria-busy');
     };
 
     $(document).off('click.wccg', '.wccg-edit-rule-btn').on('click.wccg', '.wccg-edit-rule-btn', function() {
@@ -29,6 +47,7 @@ export function initPricingRuleModal($) {
         $('.wccg-schedule-edit-row').hide();
         setStatusMessage('info', strings.loading_rule_data || 'Loading rule data...');
         $modal.find('.wccg-modal-save').prop('disabled', true);
+        $modal.attr('aria-busy', 'true');
         $modal.fadeIn(200, () => {
             $modal.find('.wccg-modal-container').trigger('focus');
         });
@@ -37,6 +56,7 @@ export function initPricingRuleModal($) {
         $.ajax({
             url: wccg_pricing_rules.ajax_url,
             type: 'POST',
+            timeout: 15000,
             data: {
                 action: 'wccg_get_rule_data',
                 nonce: wccg_pricing_rules.nonce,
@@ -44,7 +64,7 @@ export function initPricingRuleModal($) {
             },
             success(response) {
                 if (!response.success) {
-                    setStatusMessage('error', (strings.error_prefix || 'Error:') + ' ' + response.data.message);
+                    setStatusMessage('error', response.data && response.data.message ? response.data.message : (strings.failed_load_rule_data || 'Could not load the pricing rule. Please try again.'));
                     return;
                 }
 
@@ -58,8 +78,14 @@ export function initPricingRuleModal($) {
                 $modal.find('.wccg-modal-message').attr('role', 'status').html('');
                 $modal.find('.wccg-modal-save').prop('disabled', false);
             },
-            error() {
-                setStatusMessage('error', strings.failed_load_rule_data || 'Failed to load rule data.');
+            error(jqXHR, textStatus) {
+                const fallbackMessage = textStatus === 'timeout'
+                    ? (strings.rule_load_timeout || 'Loading the pricing rule took too long. Please try again.')
+                    : (strings.failed_load_rule_data || 'Could not load the pricing rule. Please try again.');
+                setStatusMessage('error', getFriendlyError({ ...jqXHR, statusText: textStatus }, fallbackMessage));
+            },
+            complete() {
+                $modal.attr('aria-busy', 'false');
             }
         });
     });
@@ -147,16 +173,18 @@ export function initPricingRuleModal($) {
             return;
         }
 
-        $saveBtn.prop('disabled', true).text(strings.saving || 'Saving...');
+        $saveBtn.prop('disabled', true).text(strings.saving || 'Saving...').attr('aria-busy', 'true');
+        $modal.attr('aria-busy', 'true');
         setStatusMessage('info', strings.updating_rule || 'Updating rule...');
 
         $.ajax({
             url: wccg_pricing_rules.ajax_url,
             type: 'POST',
+            timeout: 15000,
             data: payload,
             success(response) {
                 if (!response.success) {
-                    setStatusMessage('error', (strings.error_prefix || 'Error:') + ' ' + response.data.message);
+                    setStatusMessage('error', response.data && response.data.message ? response.data.message : (strings.rule_update_error || 'Could not update the pricing rule. Please try again.'));
                     return;
                 }
 
@@ -173,11 +201,15 @@ export function initPricingRuleModal($) {
                 setStatusMessage('success', response.data.message);
                 setTimeout(closeModal, 1000);
             },
-            error() {
-                setStatusMessage('error', strings.rule_update_error || 'An error occurred while updating the rule.');
+            error(jqXHR, textStatus) {
+                const fallbackMessage = textStatus === 'timeout'
+                    ? (strings.rule_update_timeout || 'Saving the pricing rule took too long. Please try again.')
+                    : (strings.rule_update_error || 'Could not update the pricing rule. Please try again.');
+                setStatusMessage('error', getFriendlyError({ ...jqXHR, statusText: textStatus }, fallbackMessage));
             },
             complete() {
-                $saveBtn.prop('disabled', false).text(strings.save_changes || 'Save Changes');
+                $saveBtn.prop('disabled', false).text(strings.save_changes || 'Save Changes').removeAttr('aria-busy');
+                $modal.attr('aria-busy', 'false');
             }
         });
     });
