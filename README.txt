@@ -1,5 +1,5 @@
-=== Customer Groups for WooCommerce ===
-Contributors: CueFox
+=== Alynt Customer Groups ===
+Contributors: Alynt
 Tags: woocommerce, customer groups, pricing, discounts, wholesale
 Requires at least: 5.8
 Tested up to: 6.3
@@ -14,7 +14,7 @@ Create customer groups and set up custom pricing rules for different customer se
 
 == Description ==
 
-Customer Groups for WooCommerce allows you to create custom customer groups and set up specific pricing rules for different customer segments. Perfect for implementing wholesale pricing, VIP customer discounts, or any other customer-specific pricing strategy.
+Alynt Customer Groups allows you to create custom customer groups and set up specific pricing rules for different customer segments. Perfect for implementing wholesale pricing, VIP customer discounts, or any other customer-specific pricing strategy.
 
 = Key Features =
 
@@ -48,7 +48,7 @@ Customer Groups for WooCommerce allows you to create custom customer groups and 
 
 == Installation ==
 
-1. Upload the plugin files to `/wp-content/plugins/customer-groups-for-woocommerce`, or install the plugin through the WordPress plugins screen
+1. Upload the plugin files to `/wp-content/plugins/alynt-customer-groups`, or install the plugin through the WordPress plugins screen
 2. Activate the plugin through the 'Plugins' screen in WordPress
 3. Navigate to WooCommerce → Customer Groups to start creating groups and setting up pricing rules
 
@@ -134,7 +134,7 @@ The plugin includes:
 == Upgrade Notice ==
 
 = 1.0.0 =
-Initial release of Customer Groups for WooCommerce.
+Initial release of Alynt Customer Groups.
 
 == Development ==
 
@@ -142,7 +142,7 @@ Initial release of Customer Groups for WooCommerce.
 
 To create a new translation:
 
-1. Copy `languages/customer-groups-for-woocommerce.pot` to `languages/customer-groups-for-woocommerce-XX_XX.po` (replace XX_XX with your locale)
+1. Copy `languages/alynt-customer-groups.pot` to `languages/alynt-customer-groups-XX_XX.po` (replace XX_XX with your locale)
 2. Translate the strings in the PO file
 3. Generate the MO file using a tool like Poedit
 4. Place both PO and MO files in the languages directory

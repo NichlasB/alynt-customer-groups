@@ -30,7 +30,7 @@ wp_clear_scheduled_hook('wccg_cleanup_cron');
 
 // Log uninstallation if WP_DEBUG is enabled
 if (defined('WP_DEBUG') && WP_DEBUG) {
-    error_log('Starting Customer Groups for WooCommerce uninstallation');
+    error_log('Starting Alynt Customer Groups uninstallation');
 }
 
 // Drop tables with error checking
@@ -69,5 +69,5 @@ wp_cache_flush();
 
 // Log completion if WP_DEBUG is enabled
 if (defined('WP_DEBUG') && WP_DEBUG) {
-    error_log('Completed Customer Groups for WooCommerce uninstallation');
+    error_log('Completed Alynt Customer Groups uninstallation');
 }

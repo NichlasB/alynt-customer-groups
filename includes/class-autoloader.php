@@ -1,84 +1,90 @@
 <?php
 /**
- * Autoloader for plugin classes
+ * PSR-0-style autoloader for WCCG_ classes.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Registers an SPL autoload handler that maps WCCG_ class names to plugin file paths.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
+ */
 class WCCG_Autoloader {
+
     /**
-     * Class constructor
+     * Register the autoload callback.
+     *
+     * @since 1.0.0
      */
     public function __construct() {
         spl_autoload_register(array($this, 'autoload'));
     }
 
     /**
-     * Autoload callback
+     * Load the file for a WCCG_ class.
      *
-     * @param string $class_name The name of the class to load
+     * @since  1.0.0
+     * @param  string $class_name The fully-qualified class name to load.
+     * @return void
      */
     public function autoload($class_name) {
-        // Only handle our plugin's classes
         if (strpos($class_name, 'WCCG_') !== 0) {
             return;
         }
 
-        // Convert class name to filename
-        $file_name = $this->get_file_name_from_class($class_name);
-
-        // Get the file path
         $file = $this->get_file_path_from_class($class_name);
 
-        // Load the file if it exists
         if (file_exists($file)) {
             require_once $file;
         }
     }
 
     /**
-     * Convert class name to file name
+     * Convert a WCCG_ class name to its expected filename.
      *
-     * @param string $class_name The name of the class
-     * @return string The name of the file
+     * @since  1.0.0
+     * @param  string $class_name The class name to convert.
+     * @return string The expected filename (e.g. class-admin-pricing-rules.php).
      */
     private function get_file_name_from_class($class_name) {
-        return 'class-' . str_replace('_', '-', 
+        return 'class-' . str_replace('_', '-',
             strtolower(
-                substr($class_name, 5) // Remove 'WCCG_' prefix
+                substr($class_name, 5) // Remove 'WCCG_' prefix.
             )
         ) . '.php';
     }
 
     /**
-     * Get the file path for a class
+     * Resolve the absolute file path for a WCCG_ class.
      *
-     * @param string $class_name The name of the class
-     * @return string The file path
+     * @since  1.0.0
+     * @param  string $class_name The class name to resolve.
+     * @return string Absolute path to the class file.
      */
     private function get_file_path_from_class($class_name) {
         $file_name = $this->get_file_name_from_class($class_name);
 
-        // Define directory mapping
         $directories = array(
-            'admin' => WCCG_PATH . 'admin/',
-            'public' => WCCG_PATH . 'public/',
+            'admin'    => WCCG_PATH . 'admin/',
+            'public'   => WCCG_PATH . 'public/',
             'includes' => WCCG_PATH . 'includes/'
         );
 
-        // Handle admin classes
         if (strpos($class_name, 'WCCG_Admin_') === 0 || $class_name === 'WCCG_Admin') {
             return $directories['admin'] . $file_name;
         }
 
-        // Handle public classes
         if (strpos($class_name, 'WCCG_Public') === 0) {
             return $directories['public'] . $file_name;
         }
 
-        // Default to includes directory
         return $directories['includes'] . $file_name;
     }
 }

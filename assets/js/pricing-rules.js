@@ -118,8 +118,6 @@ jQuery(document).ready(function($) {
                     },
                     success: function(response) {
                         if (response.success) {
-                            // Optional: Show success message
-                            console.log('Rule order updated successfully');
                         } else {
                             alert('Failed to update rule order: ' + response.data.message);
                             // Revert the sort

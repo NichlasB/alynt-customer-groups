@@ -1,6 +1,8 @@
 (function($) {
     'use strict';
 
+    const strings = (window.wccg_admin && window.wccg_admin.strings) || {};
+
     // Main admin functionality object
     const WCCG_Admin = {
         init: function() {
@@ -30,7 +32,7 @@
                 const checkedUsers = $("input[name='user_ids[]']:checked").length;
                 if (checkedUsers === 0) {
                     e.preventDefault();
-                    alert("Please select at least one user to export.");
+                    alert(strings.export_users_required || 'Please select at least one user to export.');
                     return false;
                 }
             });
@@ -92,7 +94,7 @@
                 const toDate = $('#date-to').val();
 
                 if (fromDate && toDate && fromDate > toDate) {
-                    alert('From date cannot be later than To date');
+                    alert(strings.date_range_invalid || 'From date cannot be later than To date.');
                     $(this).val('');
                 }
             });
@@ -124,12 +126,12 @@
 
                 if (type === 'percentage') {
                     if (value < 0 || value > 100) {
-                        alert('Percentage discount must be between 0 and 100');
+                        alert(strings.discount_percentage_range || 'Percentage discount must be between 0 and 100.');
                         $(this).val('');
                     }
                 } else if (type === 'fixed') {
                     if (value < 0) {
-                        alert('Fixed discount cannot be negative');
+                        alert(strings.discount_fixed_negative || 'Fixed discount cannot be negative.');
                         $(this).val('');
                     }
                 }
@@ -140,7 +142,7 @@
             // Enable search in product/category selection
             $('select[name="product_ids[]"], select[name="category_ids[]"]').select2({
                 width: '100%',
-                placeholder: 'Search...',
+                placeholder: strings.select_placeholder || 'Search...',
                 allowClear: true
             });
         },
@@ -181,18 +183,15 @@
                         new_status: newStatus
                     },
                     success: function(response) {
-                        console.log('Toggle response:', response);
                         if (response.success) {
                             const isActive = parseInt(response.data.is_active, 10);
                             const isChecked = (isActive === 1);
-                            
-                            console.log('Rule ID:', ruleId, 'Requested:', newStatus, 'Got back:', isActive, 'Setting checked to:', isChecked);
                             
                             // Find status text (re-select to ensure fresh reference)
                             const $statusText = $toggle.closest('td').find('.wccg-status-text');
                             
                             // Update status text
-                            $statusText.text(isChecked ? 'Active' : 'Inactive');
+                            $statusText.text(isChecked ? (strings.status_active || 'Active') : (strings.status_inactive || 'Inactive'));
                             
                             // Update checkbox (mark as programmatic change to avoid triggering event)
                             $toggle.data('programmatic-change', true);
@@ -214,7 +213,7 @@
                                     $scheduleCell.append(
                                         '<div class="wccg-schedule-warning">' +
                                         '<span class="dashicons dashicons-warning"></span>' +
-                                        'Rule is inactive' +
+                                        (strings.rule_inactive || 'Rule is inactive') +
                                         '</div>'
                                     );
                                 }
@@ -226,7 +225,7 @@
                             if (isChecked) {
                                 $editBtn.removeAttr('title');
                             } else {
-                                $editBtn.attr('title', 'Note: Rule is currently inactive. Enable the toggle for schedule to take effect.');
+                                $editBtn.attr('title', strings.inactive_schedule_title || 'Note: Rule is currently inactive. Enable the toggle for schedule to take effect.');
                             }
                             
                             // Update warning in the edit form if it's currently visible
@@ -244,25 +243,22 @@
                                         $editForm.find('h4').after(
                                             '<div class="wccg-inactive-rule-warning">' +
                                             '<span class="dashicons dashicons-warning"></span>' +
-                                            '<strong>Warning:</strong> ' +
-                                            'This rule is currently inactive. The schedule will not take effect until you enable the rule using the toggle switch.' +
+                                            '<strong>' + (strings.warning_label || 'Warning:') + '</strong> ' +
+                                            (strings.inactive_schedule_warning || 'This rule is currently inactive. The schedule will not take effect until you enable the rule using the toggle switch.') +
                                             '</div>'
                                         );
                                     }
                                 }
                             }
-                            
-                            console.log('Updated checkbox to:', $toggle.prop('checked'), 'Status text to:', $statusText.text());
                         } else {
-                            console.error('Toggle failed:', response.data.message);
-                            alert('Error: ' + response.data.message);
+                            alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
                             // Revert toggle
                             $toggle.data('programmatic-change', true);
                             $toggle.prop('checked', !$toggle.prop('checked'));
                         }
                     },
                     error: function() {
-                        alert('Failed to update rule status. Please try again.');
+                        alert(strings.failed_update_rule_status || 'Failed to update rule status. Please try again.');
                         // Revert toggle
                         $toggle.data('programmatic-change', true);
                         $toggle.prop('checked', !$toggle.prop('checked'));
@@ -283,17 +279,17 @@
                 e.preventDefault();
                 
                 // First confirmation
-                if (!confirm('Are you sure you want to delete ALL pricing rules? This action cannot be undone!')) {
+                if (!confirm(strings.delete_all_confirm_one || 'Are you sure you want to delete ALL pricing rules? This action cannot be undone!')) {
                     return;
                 }
                 
                 // Second confirmation (double-check)
-                if (!confirm('This will permanently delete ALL pricing rules. Are you absolutely sure?')) {
+                if (!confirm(strings.delete_all_confirm_two || 'This will permanently delete ALL pricing rules. Are you absolutely sure?')) {
                     return;
                 }
 
                 const $button = $(this);
-                $button.prop('disabled', true).text('Deleting...');
+                $button.prop('disabled', true).text(strings.deleting || 'Deleting...');
 
                 $.ajax({
                     url: wccg_pricing_rules.ajax_url,
@@ -307,13 +303,13 @@
                             alert(response.data.message);
                             location.reload();
                         } else {
-                            alert('Error: ' + response.data.message);
-                            $button.prop('disabled', false).text('Delete All Pricing Rules');
+                            alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
+                            $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules');
                         }
                     },
                     error: function() {
-                        alert('Failed to delete pricing rules. Please try again.');
-                        $button.prop('disabled', false).text('Delete All Pricing Rules');
+                        alert(strings.failed_delete_pricing || 'Failed to delete pricing rules. Please try again.');
+                        $button.prop('disabled', false).text(strings.delete_all_label || 'Delete All Pricing Rules');
                     }
                 });
             });
@@ -329,7 +325,7 @@
                 
                 const $button = $(this);
                 const originalText = $button.text();
-                $button.prop('disabled', true).text('Enabling...');
+                $button.prop('disabled', true).text(strings.enabling || 'Enabling...');
 
                 $.ajax({
                     url: wccg_pricing_rules.ajax_url,
@@ -346,16 +342,16 @@
                                 const $thisToggle = $(this);
                                 $thisToggle.data('programmatic-change', true).prop('checked', true);
                                 // Update status text for this specific toggle
-                                $thisToggle.closest('td').find('.wccg-status-text').text('Active');
+                                $thisToggle.closest('td').find('.wccg-status-text').text(strings.status_active || 'Active');
                             });
                             alert(response.data.message);
                         } else {
-                            alert('Error: ' + response.data.message);
+                            alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
                         }
                         $button.prop('disabled', false).text(originalText);
                     },
                     error: function() {
-                        alert('Failed to enable pricing rules. Please try again.');
+                        alert(strings.failed_enable_pricing || 'Failed to enable pricing rules. Please try again.');
                         $button.prop('disabled', false).text(originalText);
                     }
                 });
@@ -365,13 +361,13 @@
             $('#wccg-disable-all-rules').on('click.wccg', function(e) {
                 e.preventDefault();
                 
-                if (!confirm('Are you sure you want to disable all pricing rules?')) {
+                if (!confirm(strings.disable_all_confirm || 'Are you sure you want to disable all pricing rules?')) {
                     return;
                 }
 
                 const $button = $(this);
                 const originalText = $button.text();
-                $button.prop('disabled', true).text('Disabling...');
+                $button.prop('disabled', true).text(strings.disabling || 'Disabling...');
 
                 $.ajax({
                     url: wccg_pricing_rules.ajax_url,
@@ -388,16 +384,16 @@
                                 const $thisToggle = $(this);
                                 $thisToggle.data('programmatic-change', true).prop('checked', false);
                                 // Update status text for this specific toggle
-                                $thisToggle.closest('td').find('.wccg-status-text').text('Inactive');
+                                $thisToggle.closest('td').find('.wccg-status-text').text(strings.status_inactive || 'Inactive');
                             });
                             alert(response.data.message);
                         } else {
-                            alert('Error: ' + response.data.message);
+                            alert((strings.error_prefix || 'Error:') + ' ' + response.data.message);
                         }
                         $button.prop('disabled', false).text(originalText);
                     },
                     error: function() {
-                        alert('Failed to disable pricing rules. Please try again.');
+                        alert(strings.failed_disable_pricing || 'Failed to disable pricing rules. Please try again.');
                         $button.prop('disabled', false).text(originalText);
                     }
                 });
@@ -416,7 +412,7 @@
 
             // Confirm group deletion
             $('form input[name="action"][value="delete_group"]').closest('form').on('submit.wccg', function(e) {
-                if (!confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
+                if (!confirm(strings.delete_group_confirm || 'Are you sure you want to delete this group? This action cannot be undone.')) {
                     e.preventDefault();
                     return false;
                 }
@@ -426,7 +422,7 @@
             $('input[name="group_name"]').on('input.wccg', function() {
                 const value = $(this).val();
                 if (value.length > 255) {
-                    alert('Group name cannot exceed 255 characters');
+                    alert(strings.group_name_max || 'Group name cannot exceed 255 characters.');
                     $(this).val(value.substring(0, 255));
                 }
             });

@@ -1,391 +1,141 @@
 <?php
 /**
- * Utility functions
+ * Utility facade — aggregates security, sanitization, rate limiting, and logging helpers.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Provides a single access point for the plugin's cross-cutting concerns.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
+ */
 class WCCG_Utilities {
-    /**
-     * Single instance of the class
-     *
-     * @var WCCG_Utilities
-     */
     private static $instance = null;
 
+    private $security;
+    private $input;
+    private $rate_limiter;
+    private $logger;
+
     /**
-     * Get class instance
+     * Return the singleton instance of this class.
      *
+     * @since  1.0.0
      * @return WCCG_Utilities
      */
     public static function instance() {
         if (is_null(self::$instance)) {
             self::$instance = new self();
         }
+
         return self::$instance;
     }
 
+    private function __construct() {
+        $this->security     = WCCG_Security_Helper::instance();
+        $this->input        = WCCG_Input_Sanitizer::instance();
+        $this->rate_limiter = WCCG_Rate_Limiter::instance();
+        $this->logger       = WCCG_Logger::instance();
+    }
+
     /**
-     * Verify nonce
+     * Verify a WordPress nonce from the current request.
      *
-     * @param string $nonce_name
-     * @return bool
+     * @since  1.0.0
+     * @param  string $nonce_name The nonce action name to verify against.
+     * @return bool True on success; calls wp_die() on failure.
      */
     public function verify_nonce($nonce_name) {
-        if (!isset($_REQUEST['_wpnonce'])) {
-            wp_die('Security check failed - nonce not set');
-        }
-
-        if (!wp_verify_nonce($_REQUEST['_wpnonce'], $nonce_name)) {
-            wp_die('Security check failed - invalid nonce');
-        }
-
-        return true;
+        return $this->security->verify_nonce($nonce_name);
     }
 
     /**
-     * Escape output
+     * Escape a value for safe output.
      *
-     * @param mixed $data
-     * @param string $type
-     * @return string
+     * @since  1.0.0
+     * @param  mixed  $data The value to escape.
+     * @param  string $type Escape context: 'text' (default), 'html', 'url', 'attr', 'textarea'.
+     * @return string Escaped string.
      */
     public function escape_output($data, $type = 'text') {
-        switch ($type) {
-            case 'html':
-            return wp_kses_post($data);
-            case 'url':
-            return esc_url($data);
-            case 'attr':
-            return esc_attr($data);
-            case 'textarea':
-            return esc_textarea($data);
-            default:
-            return esc_html($data);
-        }
+        return $this->security->escape_output($data, $type);
     }
 
     /**
-     * Verify admin access
+     * Verify the current user has the manage_woocommerce capability; die on failure.
+     *
+     * @since  1.0.0
+     * @return void
      */
     public function verify_admin_access() {
-        if (!current_user_can('manage_woocommerce')) {
-            wp_die(__('You do not have sufficient permissions to access this page.', 'wccg'));
-        }
+        $this->security->verify_admin_access();
     }
 
     /**
-     * Validate pricing input
+     * Validate a discount type and value combination.
      *
-     * @param string $discount_type
-     * @param float $discount_value
-     * @return array
+     * @since  1.0.0
+     * @param  string $discount_type  'percentage' or 'fixed'.
+     * @param  mixed  $discount_value The discount amount to validate.
+     * @return array { @type bool $valid, @type string $message (only present on failure) }
      */
     public function validate_pricing_input($discount_type, $discount_value) {
-        if (!in_array($discount_type, array('percentage', 'fixed'))) {
-            return array(
-                'valid' => false,
-                'message' => 'Invalid discount type.'
-            );
-        }
-
-        if (!is_numeric($discount_value)) {
-            return array(
-                'valid' => false,
-                'message' => 'Discount value must be a number.'
-            );
-        }
-
-        if ($discount_type === 'percentage') {
-            if ($discount_value < 0 || $discount_value > 100) {
-                return array(
-                    'valid' => false,
-                    'message' => 'Percentage discount must be between 0 and 100.'
-                );
-            }
-        }
-
-        if ($discount_type === 'fixed') {
-            if ($discount_value < 0) {
-                return array(
-                    'valid' => false,
-                    'message' => 'Fixed discount cannot be negative.'
-                );
-            }
-
-            $max_fixed_discount = 10000;
-            if ($discount_value > $max_fixed_discount) {
-                return array(
-                    'valid' => false,
-                    'message' => sprintf('Fixed discount cannot exceed %s.', 
-                        wc_price($max_fixed_discount))
-                );
-            }
-        }
-
-        return array('valid' => true);
+        return $this->input->validate_pricing_input($discount_type, $discount_value);
     }
 
     /**
-     * Sanitize input data
+     * Sanitize an input value according to the specified type.
      *
-     * @param mixed $data
-     * @param string $type
-     * @param array $args
-     * @return mixed
+     * @since  1.0.0
+     * @param  mixed  $data The raw input value.
+     * @param  string $type Sanitization type: 'text', 'int', 'float', 'price', 'email',
+     *                      'url', 'textarea', 'array', 'group_id', 'discount_type'.
+     * @param  array  $args Optional additional arguments for the sanitizer.
+     * @return mixed Sanitized value.
      */
     public function sanitize_input($data, $type = 'text', $args = array()) {
-        if (is_null($data)) {
-            return '';
-        }
-
-        switch ($type) {
-            case 'int':
-            return intval($data);
-
-            case 'float':
-            return (float) filter_var($data, 
-                FILTER_SANITIZE_NUMBER_FLOAT, 
-                FILTER_FLAG_ALLOW_FRACTION);
-
-            case 'price':
-            $price = (float) filter_var($data, 
-                FILTER_SANITIZE_NUMBER_FLOAT, 
-                FILTER_FLAG_ALLOW_FRACTION);
-            return round($price, wc_get_price_decimals());
-
-            case 'email':
-            return sanitize_email($data);
-
-            case 'url':
-            return esc_url_raw($data);
-
-            case 'textarea':
-            return sanitize_textarea_field($data);
-
-            case 'array':
-            if (!is_array($data)) {
-                return array();
-            }
-            return array_map(array($this, 'sanitize_input'), $data);
-
-            case 'group_id':
-            $group_id = intval($data);
-            global $wpdb;
-            $exists = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}customer_groups 
-                WHERE group_id = %d",
-                $group_id
-            ));
-            return $exists ? $group_id : 0;
-
-            case 'discount_type':
-            $allowed_types = array('percentage', 'fixed');
-            $sanitized = sanitize_text_field($data);
-            return in_array($sanitized, $allowed_types) ? $sanitized : '';
-
-            default:
-            return sanitize_text_field($data);
-        }
+        return $this->input->sanitize_input($data, $type, $args);
     }
 
     /**
-     * Check rate limit
+     * Check whether the current request exceeds the rate limit for an action.
      *
-     * @param int $user_id
-     * @param string $action
-     * @return bool
+     * @since  1.0.0
+     * @param  int    $user_id WordPress user ID.
+     * @param  string $action  Rate-limit bucket: 'price_calc' (100/min), 'group_change' (10/5min).
+     * @return bool True if the request is within limits, false if the limit is exceeded.
      */
     public function check_rate_limit($user_id, $action = 'price_calc') {
-        if (is_super_admin()) {
-            return true;
-        }
-
-        $transient_key = 'wccg_rate_limit_' . $action . '_' . $user_id;
-        $limit_data = get_transient($transient_key);
-
-        switch ($action) {
-            case 'price_calc':
-            $max_requests = 100;
-            $time_window = MINUTE_IN_SECONDS;
-            break;
-            case 'group_change':
-            $max_requests = 10;
-            $time_window = MINUTE_IN_SECONDS * 5;
-            break;
-            default:
-            $max_requests = 50;
-            $time_window = MINUTE_IN_SECONDS;
-        }
-
-        if (false === $limit_data) {
-            $limit_data = array(
-                'count' => 1,
-                'first_request' => time()
-            );
-            set_transient($transient_key, $limit_data, $time_window);
-            return true;
-        }
-
-        if ((time() - $limit_data['first_request']) > $time_window) {
-            $limit_data = array(
-                'count' => 1,
-                'first_request' => time()
-            );
-            set_transient($transient_key, $limit_data, $time_window);
-            return true;
-        }
-
-        if ($limit_data['count'] >= $max_requests) {
-            $this->log_error(
-                'Rate limit exceeded',
-                array(
-                    'user_id' => $user_id,
-                    'action' => $action,
-                    'limit_data' => $limit_data
-                )
-            );
-            return false;
-        }
-
-        $limit_data['count']++;
-        set_transient($transient_key, $limit_data, $time_window);
-        return true;
+        return $this->rate_limiter->check_rate_limit($user_id, $action);
     }
 
-/**
- * Log error message
- *
- * @param string $message Error message
- * @param array $data Additional data
- * @param string $severity Error severity (debug, info, warning, error, critical)
- * @return bool
- */
-public function log_error($message, $data = array(), $severity = 'error') {
-    // Define severity levels and their threshold
-    $severity_levels = array(
-        'debug' => 0,
-        'info' => 1,
-        'warning' => 2,
-        'error' => 3,
-        'critical' => 4
-    );
-
-    // Only proceed if it's an error or critical severity
-    if (!isset($severity_levels[$severity]) || $severity_levels[$severity] < $severity_levels['error']) {
-        return false;
+    /**
+     * Log an error or informational message to the database and PHP error log.
+     *
+     * @since  1.0.0
+     * @param  string $message  Human-readable description of the event.
+     * @param  array  $data     Optional structured data to attach to the log entry.
+     * @param  string $severity One of 'debug', 'info', 'warning', 'error', 'critical'.
+     * @return bool True if the entry was inserted, false otherwise.
+     */
+    public function log_error($message, $data = array(), $severity = 'error') {
+        return $this->logger->log_error($message, $data, $severity);
     }
 
-    $current_user_id = get_current_user_id();
-    $timestamp = current_time('mysql');
-
-    // Only log to debug.log for critical errors or when WP_DEBUG_LOG is true
-    if ($severity === 'critical' || WP_DEBUG_LOG) {
-        $log_entry = sprintf(
-            "[%s] [%s] [User: %d] %s",
-            $timestamp,
-            strtoupper($severity),
-            $current_user_id,
-            $message
-        );
-
-        if (!empty($data)) {
-            // Ensure data is JSON-encodable
-            $json_data = wp_json_encode($data);
-            if ($json_data !== false) {
-                $log_entry .= " | Data: " . $json_data;
-            }
-        }
-
-        error_log($log_entry);
+    /**
+     * Return the total number of entries in the error log table.
+     *
+     * @since  1.0.0
+     * @return int Log entry count, or 0 if the table does not exist.
+     */
+    public function get_log_count() {
+        return $this->logger->get_log_count();
     }
-
-    // Store in database only for error and critical severities
-    try {
-        global $wpdb;
-
-        // Check if table exists
-        $table_name = $wpdb->prefix . 'wccg_error_log';
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-
-        if ($table_exists) {
-            // Ensure data is JSON-encodable
-            $json_data = !empty($data) ? wp_json_encode($data) : null;
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $json_data = wp_json_encode(['error' => 'Data not JSON encodable']);
-            }
-
-            $result = $wpdb->insert(
-                $table_name,
-                array(
-                    'timestamp' => $timestamp,
-                    'user_id' => $current_user_id,
-                    'message' => $message,
-                    'data' => $json_data,
-                    'severity' => $severity
-                ),
-                array('%s', '%d', '%s', '%s', '%s')
-            );
-
-            return $result !== false;
-        }
-
-        return false;
-
-    } catch (Exception $e) {
-        error_log('WCCG Error Logger Failed: ' . $e->getMessage());
-        return false;
-    }
-}
-
-/**
- * Clean up old logs
- *
- * @return bool
- */
-public function cleanup_logs() {
-    global $wpdb;
-
-    try {
-        $table_name = $wpdb->prefix . 'wccg_error_log';
-
-        // Check if table exists
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-
-        if ($table_exists) {
-            // Keep critical errors for 90 days, others for 30 days
-            $wpdb->query("DELETE FROM $table_name 
-                WHERE (severity != 'critical' AND timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY))
-                OR (severity = 'critical' AND timestamp < DATE_SUB(NOW(), INTERVAL 90 DAY))");
-
-            return true;
-        }
-        return false;
-    } catch (Exception $e) {
-        error_log('WCCG Log Cleanup Failed: ' . $e->getMessage());
-        return false;
-    }
-}
-
-/**
- * Get current log count
- *
- * @return int
- */
-public function get_log_count() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'wccg_error_log';
-
-    // Check if table exists
-    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-
-    if ($table_exists) {
-        return (int) $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-    }
-
-    return 0;
-}
-
 }

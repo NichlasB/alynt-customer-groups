@@ -3,6 +3,7 @@ vendor/
 build/
 dist/
 coverage/
+assets/dist/
 composer.phar
 .env
 .env.*

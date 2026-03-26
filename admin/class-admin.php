@@ -1,169 +1,181 @@
 <?php
 /**
- * Admin functionality handler
+ * Admin coordinator: menus, assets, and the product list pricing column.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Registers admin menu pages, enqueues admin assets, and adds the Group Pricing column
+ * to the WooCommerce Products list table.
+ *
+ * @package Alynt_Customer_Groups
+ * @since   1.0.0
+ */
 class WCCG_Admin {
-    /**
-     * Single instance of the class
-     *
-     * @var WCCG_Admin
-     */
     private static $instance = null;
-
-    /**
-     * Utility instance
-     *
-     * @var WCCG_Utilities
-     */
     private $utils;
-
-    /**
-     * Database instance
-     *
-     * @var WCCG_Database
-     */
     private $db;
 
     /**
-     * Get class instance
+     * Return the singleton instance of this class.
      *
+     * @since  1.0.0
      * @return WCCG_Admin
      */
     public static function instance() {
         if (is_null(self::$instance)) {
             self::$instance = new self();
         }
+
         return self::$instance;
     }
 
-    /**
-     * Constructor
-     */
     private function __construct() {
         $this->utils = WCCG_Utilities::instance();
         $this->db = WCCG_Database::instance();
         $this->init_hooks();
     }
 
-    /**
-     * Initialize hooks
-     */
     private function init_hooks() {
-        // Add menu items
+        /**
+         * Fires before the administration menu loads so plugin menu pages can be registered.
+         *
+         * @since 1.0.0
+         */
         add_action('admin_menu', array($this, 'add_menu_items'));
 
-        // Add admin assets
+        /**
+         * Fires when admin scripts and styles should be enqueued.
+         *
+         * @since 1.0.0
+         *
+         * @param string $hook_suffix The current admin page hook suffix.
+         */
         add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
 
-        // Add product list column hooks
+        /**
+         * Filters the columns shown on the Products list table.
+         *
+         * @since 1.0.0
+         *
+         * @param array $columns Existing product list table columns.
+         */
         add_filter('manage_product_posts_columns', array($this, 'add_pricing_rule_column'));
-        add_action('manage_product_posts_custom_column', array($this, 'display_pricing_rule_column'), 10, 2);
 
-        // Add pricing rule info box
-        add_action('woocommerce_admin_after_product_data_panels', array($this, 'add_pricing_rule_info_box'));
+        /**
+         * Fires when a custom column value is rendered for a product row.
+         *
+         * @since 1.0.0
+         *
+         * @param string $column  The current column name.
+         * @param int    $post_id The product post ID.
+         */
+        add_action('manage_product_posts_custom_column', array($this, 'display_pricing_rule_column'), 10, 2);
     }
 
     /**
-     * Add admin menu items
+     * Register the Customer Groups top-level menu and its sub-pages.
+     *
+     * @since  1.0.0
+     * @return void
      */
     public function add_menu_items() {
         $this->utils->verify_admin_access();
-
-        add_menu_page(
-            __('Customer Groups', 'wccg'),
-            __('Customer Groups', 'wccg'),
-            'manage_woocommerce',
-            'wccg_customer_groups',
-            array($this, 'display_customer_groups_page'),
-            'dashicons-groups',
-            56
-        );
-
-        add_submenu_page(
-            'wccg_customer_groups',
-            __('User Assignments', 'wccg'),
-            __('User Assignments', 'wccg'),
-            'manage_woocommerce',
-            'wccg_user_assignments',
-            array($this, 'display_user_assignments_page')
-        );
-
-        add_submenu_page(
-            'wccg_customer_groups',
-            __('Pricing Rules', 'wccg'),
-            __('Pricing Rules', 'wccg'),
-            'manage_woocommerce',
-            'wccg_pricing_rules',
-            array($this, 'display_pricing_rules_page')
-        );
+        add_menu_page(__('Customer Groups', 'alynt-customer-groups'), __('Customer Groups', 'alynt-customer-groups'), 'manage_woocommerce', 'wccg_customer_groups', array($this, 'display_customer_groups_page'), 'dashicons-groups', 56);
+        add_submenu_page('wccg_customer_groups', __('User Assignments', 'alynt-customer-groups'), __('User Assignments', 'alynt-customer-groups'), 'manage_woocommerce', 'wccg_user_assignments', array($this, 'display_user_assignments_page'));
+        add_submenu_page('wccg_customer_groups', __('Pricing Rules', 'alynt-customer-groups'), __('Pricing Rules', 'alynt-customer-groups'), 'manage_woocommerce', 'wccg_pricing_rules', array($this, 'display_pricing_rules_page'));
     }
 
     /**
-     * Enqueue admin assets
+     * Enqueue admin CSS and JavaScript on plugin and product admin pages.
      *
-     * @param string $hook
+     * @since  1.0.0
+     * @param  string $hook The current admin page hook suffix.
+     * @return void
      */
     public function enqueue_assets($hook) {
         if (strpos($hook, 'wccg_') === false && $hook !== 'product') {
             return;
         }
 
-        wp_enqueue_style(
-            'wccg-admin-styles',
-            WCCG_URL . 'assets/css/admin.css',
-            array(),
-            WCCG_VERSION
-        );
+        $style_url = WCCG_URL . 'assets/dist/admin/index.css';
+        $script_url = WCCG_URL . 'assets/dist/admin/index.js';
+        if (!file_exists(WCCG_PATH . 'assets/dist/admin/index.css')) {
+            $style_url = WCCG_URL . 'assets/css/admin.css';
+        }
+        if (!file_exists(WCCG_PATH . 'assets/dist/admin/index.js')) {
+            $script_url = WCCG_URL . 'assets/js/admin.js';
+        }
 
-        wp_enqueue_script(
-            'wccg-admin-script',
-            WCCG_URL . 'assets/js/admin.js',
-            array('jquery'),
-            WCCG_VERSION,
-            true
-        );
-
-        // Add localized script data
+        wp_enqueue_style('wccg-admin-styles', $style_url, array(), WCCG_VERSION);
+        wp_enqueue_script('wccg-admin-script', $script_url, array('jquery', 'jquery-ui-sortable'), WCCG_VERSION, true);
         wp_localize_script('wccg-admin-script', 'wccg_admin', array(
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wccg_admin_nonce'),
-            'strings' => array(
-                'rule_conflict' => __('Warning: This rule conflicts with existing rules', 'wccg'),
-                'fixed_discount' => __('Fixed discounts take precedence over percentage discounts', 'wccg'),
-                'category_override' => __('Product-specific rules override category rules', 'wccg')
+            'nonce'    => wp_create_nonce('wccg_admin_nonce'),
+            'strings'  => array(
+                'rule_conflict'              => __('Warning: This rule conflicts with existing rules', 'alynt-customer-groups'),
+                'fixed_discount'             => __('Fixed discounts take precedence over percentage discounts', 'alynt-customer-groups'),
+                'category_override'          => __('Product-specific rules override category rules', 'alynt-customer-groups'),
+                'export_users_required'      => __('Please select at least one user to export.', 'alynt-customer-groups'),
+                'date_range_invalid'         => __('From date cannot be later than To date.', 'alynt-customer-groups'),
+                'discount_percentage_range'  => __('Percentage discount must be between 0 and 100.', 'alynt-customer-groups'),
+                'discount_fixed_negative'    => __('Fixed discount cannot be negative.', 'alynt-customer-groups'),
+                'select_placeholder'         => __('Search...', 'alynt-customer-groups'),
+                'status_active'              => __('Active', 'alynt-customer-groups'),
+                'status_inactive'            => __('Inactive', 'alynt-customer-groups'),
+                'rule_inactive'              => __('Rule is inactive', 'alynt-customer-groups'),
+                'inactive_schedule_title'    => __('Note: Rule is currently inactive. Enable the toggle for schedule to take effect.', 'alynt-customer-groups'),
+                'inactive_schedule_warning'  => __('This rule is currently inactive. The schedule will not take effect until you enable the rule using the toggle switch.', 'alynt-customer-groups'),
+                'warning_label'              => __('Warning:', 'alynt-customer-groups'),
+                'error_prefix'               => __('Error:', 'alynt-customer-groups'),
+                'failed_update_rule_status'  => __('Failed to update rule status. Please try again.', 'alynt-customer-groups'),
+                'delete_all_confirm_one'     => __('Are you sure you want to delete ALL pricing rules? This action cannot be undone!', 'alynt-customer-groups'),
+                'delete_all_confirm_two'     => __('This will permanently delete ALL pricing rules. Are you absolutely sure?', 'alynt-customer-groups'),
+                'deleting'                   => __('Deleting...', 'alynt-customer-groups'),
+                'delete_all_label'           => __('Delete All Pricing Rules', 'alynt-customer-groups'),
+                'failed_delete_pricing'      => __('Failed to delete pricing rules. Please try again.', 'alynt-customer-groups'),
+                'enabling'                   => __('Enabling...', 'alynt-customer-groups'),
+                'failed_enable_pricing'      => __('Failed to enable pricing rules. Please try again.', 'alynt-customer-groups'),
+                'disable_all_confirm'        => __('Are you sure you want to disable all pricing rules?', 'alynt-customer-groups'),
+                'disabling'                  => __('Disabling...', 'alynt-customer-groups'),
+                'failed_disable_pricing'     => __('Failed to disable pricing rules. Please try again.', 'alynt-customer-groups'),
+                'delete_group_confirm'       => __('Are you sure you want to delete this group? This action cannot be undone.', 'alynt-customer-groups'),
+                'group_name_max'             => __('Group name cannot exceed 255 characters.', 'alynt-customer-groups'),
             )
         ));
     }
 
     /**
-     * Add pricing rule column to products list
+     * Insert a "Group Pricing" column after the "Price" column in the Products list table.
      *
-     * @param array $columns
-     * @return array
+     * @since  1.0.0
+     * @param  array $columns Existing column definitions.
+     * @return array Modified column definitions.
      */
     public function add_pricing_rule_column($columns) {
         $new_columns = array();
-
         foreach ($columns as $key => $column) {
             $new_columns[$key] = $column;
             if ($key === 'price') {
-                $new_columns['pricing_rules'] = __('Group Pricing', 'wccg');
+                $new_columns['pricing_rules'] = __('Group Pricing', 'alynt-customer-groups');
             }
         }
-
         return $new_columns;
     }
 
     /**
-     * Display pricing rule information in the custom column
+     * Render the Group Pricing column content for a product row.
      *
-     * @param string $column
-     * @param int $post_id
+     * @since  1.0.0
+     * @param  string $column  The column name being rendered.
+     * @param  int    $post_id The product post ID.
+     * @return void
      */
     public function display_pricing_rule_column($column, $post_id) {
         if ($column !== 'pricing_rules') {
@@ -171,10 +183,8 @@ class WCCG_Admin {
         }
 
         global $wpdb;
-
-        // Get product-specific rules
         $product_rules = $wpdb->get_results($wpdb->prepare(
-            "SELECT pr.*, g.group_name 
+            "SELECT pr.*, g.group_name
             FROM {$wpdb->prefix}pricing_rules pr
             JOIN {$wpdb->prefix}rule_products rp ON pr.rule_id = rp.rule_id
             JOIN {$wpdb->prefix}customer_groups g ON pr.group_id = g.group_id
@@ -183,10 +193,8 @@ class WCCG_Admin {
             $post_id
         ));
 
-        // Get category rules
         $category_ids = $this->db->get_all_product_categories($post_id);
         $category_rules = array();
-
         if (!empty($category_ids)) {
             $placeholders = implode(',', array_fill(0, count($category_ids), '%d'));
             $category_rules = $wpdb->get_results($wpdb->prepare(
@@ -202,84 +210,69 @@ class WCCG_Admin {
         }
 
         echo '<div class="wccg-rules-info">';
-
         if (!empty($product_rules)) {
-            echo '<div class="product-specific-rules">';
-            echo '<strong>' . __('Product Rules:', 'wccg') . '</strong>';
+            echo '<div class="product-specific-rules"><strong>' . __('Product Rules:', 'alynt-customer-groups') . '</strong>';
             foreach ($product_rules as $rule) {
                 $this->display_rule_info($rule);
             }
             echo '</div>';
         }
-
         if (!empty($category_rules)) {
             $disabled = !empty($product_rules) ? ' disabled' : '';
-            echo '<div class="category-rules' . $disabled . '">';
-            echo '<strong>' . __('Category Rules:', 'wccg') . '</strong>';
+            echo '<div class="category-rules' . $disabled . '"><strong>' . __('Category Rules:', 'alynt-customer-groups') . '</strong>';
             foreach ($category_rules as $rule) {
                 $this->display_rule_info($rule, $rule->category_name);
             }
             echo '</div>';
         }
-
         if (empty($product_rules) && empty($category_rules)) {
-            echo '<span class="no-rules">' . __('No pricing rules', 'wccg') . '</span>';
+            echo '<span class="no-rules">' . __('No pricing rules', 'alynt-customer-groups') . '</span>';
         }
-
         echo '</div>';
     }
 
-    /**
-     * Display individual rule information
-     *
-     * @param object $rule
-     * @param string $category_name
-     */
     private function display_rule_info($rule, $category_name = '') {
-        $discount_text = $rule->discount_type === 'percentage' 
-            ? $rule->discount_value . '%'
-            : wc_price($rule->discount_value);
-
-        $tooltip = sprintf(
-            __('Discount: %s\nType: %s\nCreated: %s', 'wccg'),
-            $discount_text,
-            ucfirst($rule->discount_type),
-            date_i18n(get_option('date_format'), strtotime($rule->created_at))
-        );
-
+        $discount_text = $rule->discount_type === 'percentage' ? $rule->discount_value . '%' : wc_price($rule->discount_value);
+        $tooltip = sprintf(__('Discount: %s\nType: %s\nCreated: %s', 'alynt-customer-groups'), $discount_text, ucfirst($rule->discount_type), date_i18n(get_option('date_format'), strtotime($rule->created_at)));
         if ($category_name) {
-            $tooltip .= sprintf(__('\nCategory: %s', 'wccg'), $category_name);
+            $tooltip .= sprintf(__('\nCategory: %s', 'alynt-customer-groups'), $category_name);
         }
 
-        echo '<div class="rule-info" title="' . esc_attr($tooltip) . '">';
-        echo '<span class="group-name">' . esc_html($rule->group_name) . '</span>: ';
-        echo '<span class="discount">' . esc_html($discount_text) . '</span>';
+        echo '<div class="rule-info" title="' . esc_attr($tooltip) . '"><span class="group-name">' . esc_html($rule->group_name) . '</span>: <span class="discount">' . esc_html($discount_text) . '</span>';
         if ($rule->discount_type === 'fixed') {
-            echo ' <span class="priority-indicator" title="' . 
-                esc_attr__('Fixed discounts take precedence over percentage discounts', 'wccg') . 
-                '">★</span>';
+            echo ' <span class="priority-indicator" title="' . esc_attr__('Fixed discounts take precedence over percentage discounts', 'alynt-customer-groups') . '">&#9733;</span>';
         }
         echo '</div>';
     }
 
     /**
-     * Display customer groups page
+     * Render the Customer Groups admin page.
+     *
+     * @since  1.0.0
+     * @return void
      */
     public function display_customer_groups_page() {
         WCCG_Admin_Customer_Groups::instance()->display_page();
     }
 
     /**
-     * Display user assignments page
+     * Render the User Assignments admin page.
+     *
+     * @since  1.0.0
+     * @return void
      */
     public function display_user_assignments_page() {
         WCCG_Admin_User_Assignments::instance()->display_page();
     }
 
     /**
-     * Display pricing rules page
+     * Render the Pricing Rules admin page.
+     *
+     * @since  1.0.0
+     * @return void
      */
     public function display_pricing_rules_page() {
         WCCG_Admin_Pricing_Rules::instance()->display_page();
     }
 }
+

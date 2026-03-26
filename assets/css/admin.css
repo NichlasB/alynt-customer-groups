@@ -421,8 +421,9 @@ select[name="group_id"] {
     background-color: #2271b1;
 }
 
-.wccg-toggle-switch input:focus + .wccg-toggle-slider {
-    box-shadow: 0 0 1px #2271b1;
+.wccg-toggle-switch input:focus-visible + .wccg-toggle-slider {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #2271b1;
+    outline: 2px solid transparent;
 }
 
 .wccg-toggle-switch input:checked + .wccg-toggle-slider:before {
@@ -518,7 +519,7 @@ select[name="group_id"] {
 
 .wccg-status-badge.wccg-status-expired {
     background-color: #e2e3e5;
-    color: #6c757d;
+    color: #494f55;
 }
 
 .wccg-schedule-cell {
@@ -881,9 +882,11 @@ select[name="group_id"] {
     }
 }
 
-/* ==========================================================================
-   15. Edit Rule Modal
-   ========================================================================== */
+.wccg-save-status {
+    display: inline-block;
+    min-height: 1.5em;
+}
+
 
 /* Prevent body scroll when modal is open */
 body.wccg-modal-open {
@@ -932,6 +935,12 @@ body.wccg-modal-open {
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wccg-modal-container {
+        animation: none;
     }
 }
 

@@ -15,10 +15,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install Composer dependencies (production)
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Check for package.json and install npm dependencies
+        run: |
+          if [ -f "package.json" ]; then
+            npm install
+            npm run build || echo "No build script, skipping"
+          else
+            echo "No package.json found, skipping npm steps"
+          fi
+
       - name: Create plugin zip
         id: package
         run: |
-          PLUGIN_SLUG="customer-groups-for-woocommerce"
+          PLUGIN_SLUG="alynt-customer-groups"
           VERSION="${{ github.event.release.tag_name }}"
 
           mkdir -p build/${PLUGIN_SLUG}

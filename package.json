@@ -1,0 +1,24 @@
+{
+  "name": "alynt-customer-groups",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Alynt Customer Groups",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "deploy": "bash deploy.sh",
+    "deploy:watch": "nodemon --watch . --ext php,js,css,html --ignore node_modules/ --ignore .git/ --ignore scripts/ --delay 2 --exec \"bash deploy.sh\"",
+    "dev:all": "concurrently --names \"build,deploy\" --prefix-colors \"cyan,magenta\" \"npm run dev\" \"npm run deploy:watch\"",
+    "lint": "php vendor/bin/phpcs --standard=.phpcs.xml .",
+    "lint:fix": "php vendor/bin/phpcbf --standard=.phpcs.xml .",
+    "test": "php vendor/bin/phpunit --configuration phpunit.xml",
+    "test:coverage": "php vendor/bin/phpunit --configuration phpunit.xml --coverage-html=coverage/",
+    "pot": "wp i18n make-pot . languages/alynt-customer-groups.pot"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "esbuild": "^0.24.0",
+    "nodemon": "^3.1.0"
+  }
+}

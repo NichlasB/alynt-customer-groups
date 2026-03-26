@@ -1,9 +1,9 @@
 # Copyright (C) 2024 CueFox
-# This file is distributed under the same license as the Customer Groups for WooCommerce plugin.
+# This file is distributed under the same license as the Alynt Customer Groups plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Customer Groups for WooCommerce 1.0.0\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/customer-groups-for-woocommerce\n"
+"Project-Id-Version: Alynt Customer Groups 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/alynt-customer-groups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
@@ -12,10 +12,10 @@ msgstr ""
 "POT-Creation-Date: 2024-11-01T00:00:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.7.1\n"
-"X-Domain: wccg\n"
+"X-Domain: alynt-customer-groups\n"
 
 #. Plugin Name of the plugin
-msgid "Customer Groups for WooCommerce"
+msgid "Alynt Customer Groups"
 msgstr ""
 
 #. Description of the plugin
@@ -78,18 +78,18 @@ msgstr ""
 msgid "Fixed Amount Discount"
 msgstr ""
 
-#: customer-groups-for-woocommerce.php:245
-msgid "Customer Groups for WooCommerce requires PHP version %s or higher."
+#: alynt-customer-groups.php:245
+msgid "Alynt Customer Groups requires PHP version %s or higher."
 msgstr ""
 
-#: customer-groups-for-woocommerce.php:256
-msgid "Customer Groups for WooCommerce requires WordPress version %s or higher."
+#: alynt-customer-groups.php:256
+msgid "Alynt Customer Groups requires WordPress version %s or higher."
 msgstr ""
 
-#: customer-groups-for-woocommerce.php:266
-msgid "Customer Groups for WooCommerce requires WooCommerce to be installed and activated."
+#: alynt-customer-groups.php:266
+msgid "Alynt Customer Groups requires WooCommerce to be installed and activated."
 msgstr ""
 
-#: customer-groups-for-woocommerce.php:276
-msgid "Customer Groups for WooCommerce requires WooCommerce version %s or higher."
+#: alynt-customer-groups.php:276
+msgid "Alynt Customer Groups requires WooCommerce version %s or higher."
 msgstr ""
