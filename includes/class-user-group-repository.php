@@ -17,8 +17,33 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_User_Group_Repository {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_User_Group_Repository|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
 	private $db;
+
+	/**
+	 * Cached group IDs keyed by user ID.
+	 *
+	 * @var array<int,string|null>
+	 */
+	private $user_group_cache = array();
+
+	/**
+	 * Cached group names keyed by user ID.
+	 *
+	 * @var array<int,string|null>
+	 */
+	private $user_group_name_cache = array();
 
 	/**
 	 * Return the singleton instance of this class.
@@ -34,6 +59,12 @@ class WCCG_User_Group_Repository {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize repository dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->db = WCCG_Database::instance();
 	}
@@ -48,12 +79,22 @@ class WCCG_User_Group_Repository {
 	public function get_user_group( $user_id ) {
 		global $wpdb;
 
-		return $wpdb->get_var(
+		$user_id = absint( $user_id );
+		if ( array_key_exists( $user_id, $this->user_group_cache ) ) {
+			return $this->user_group_cache[ $user_id ];
+		}
+
+		$user_groups_table = $this->db->get_table_name( 'user_groups' );
+
+		$this->user_group_cache[ $user_id ] = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT group_id FROM {$this->db->get_table_name('user_groups')} WHERE user_id = %d",
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; placeholders are used for dynamic values.
+				'SELECT group_id FROM ' . $user_groups_table . ' WHERE user_id = %d',
 				$user_id
 			)
 		);
+
+		return $this->user_group_cache[ $user_id ];
 	}
 
 	/**
@@ -66,15 +107,27 @@ class WCCG_User_Group_Repository {
 	public function get_user_group_name( $user_id ) {
 		global $wpdb;
 
-		return $wpdb->get_var(
+		$user_id = absint( $user_id );
+		if ( array_key_exists( $user_id, $this->user_group_name_cache ) ) {
+			return $this->user_group_name_cache[ $user_id ];
+		}
+
+		$groups_table      = $this->db->get_table_name( 'groups' );
+		$user_groups_table = $this->db->get_table_name( 'user_groups' );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
+		$this->user_group_name_cache[ $user_id ] = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT g.group_name
-            FROM {$this->db->get_table_name('groups')} g
-            JOIN {$this->db->get_table_name('user_groups')} ug ON g.group_id = ug.group_id
-            WHERE ug.user_id = %d",
+				'SELECT g.group_name
+            FROM ' . $groups_table . ' g
+            JOIN ' . $user_groups_table . ' ug ON g.group_id = ug.group_id
+            WHERE ug.user_id = %d',
 				$user_id
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
+
+		return $this->user_group_name_cache[ $user_id ];
 	}
 
 	/**
@@ -87,14 +140,18 @@ class WCCG_User_Group_Repository {
 	public function get_users_in_group( $group_id ) {
 		global $wpdb;
 
+		$user_groups_table = $this->db->get_table_name( 'user_groups' );
+
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
 		return $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT user_id
-            FROM {$this->db->get_table_name('user_groups')}
-            WHERE group_id = %d",
+				'SELECT user_id
+            FROM ' . $user_groups_table . '
+            WHERE group_id = %d',
 				$group_id
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -106,7 +163,10 @@ class WCCG_User_Group_Repository {
 	public function get_groups() {
 		global $wpdb;
 
-		return $wpdb->get_results( "SELECT * FROM {$this->db->get_table_name('groups')} ORDER BY group_name ASC" );
+		$groups_table = $this->db->get_table_name( 'groups' );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; this trusted plugin table name is not user input.
+		return $wpdb->get_results( 'SELECT * FROM ' . $groups_table . ' ORDER BY group_name ASC' );
 	}
 
 	/**
@@ -178,45 +238,59 @@ class WCCG_User_Group_Repository {
 
 		return $this->db->transaction(
 			function () use ( $wpdb ) {
+				$user_groups_table = $this->db->get_table_name( 'user_groups' );
+				$groups_table      = $this->db->get_table_name( 'groups' );
+
+				// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
 				$result = $wpdb->query(
-					"
-                DELETE ug
-                FROM {$this->db->get_table_name('user_groups')} ug
-                LEFT JOIN {$this->db->get_table_name('groups')} g ON ug.group_id = g.group_id
-                WHERE g.group_id IS NULL
-            "
+					'DELETE ug
+                FROM ' . $user_groups_table . ' ug
+                LEFT JOIN ' . $groups_table . ' g ON ug.group_id = g.group_id
+                WHERE g.group_id IS NULL'
 				);
+				// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared
 
 				return $result !== false;
 			}
 		);
 	}
 
+	/**
+	 * Replace the assignments for a batch of users with a single target group.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $batch_user_ids WordPress user IDs in the current batch.
+	 * @param  int   $group_id       Target customer group ID.
+	 * @return int|false Number of assignments written, or false on failure.
+	 */
 	private function replace_batch_assignments( $batch_user_ids, $group_id ) {
 		global $wpdb;
 
-		$placeholders = implode( ',', array_fill( 0, count( $batch_user_ids ), '%d' ) );
-		$wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$this->db->get_table_name('user_groups')} WHERE user_id IN ($placeholders)",
-				$batch_user_ids
-			)
-		);
-
-		$values             = array();
-		$value_placeholders = array();
+		$user_groups_table = $this->db->get_table_name( 'user_groups' );
+		$batch_user_ids    = array_values( array_unique( array_filter( array_map( 'absint', $batch_user_ids ) ) ) );
+		$group_id          = absint( $group_id );
 
 		foreach ( $batch_user_ids as $user_id ) {
-			$values[]             = $user_id;
-			$values[]             = $group_id;
-			$value_placeholders[] = '(%d, %d)';
+			$delete_result = $wpdb->delete( $user_groups_table, array( 'user_id' => $user_id ), array( '%d' ) );
+			if ( false === $delete_result ) {
+				return false;
+			}
 		}
 
-		$query = $wpdb->prepare(
-			"INSERT INTO {$this->db->get_table_name('user_groups')} (user_id, group_id) VALUES " . implode( ',', $value_placeholders ),
-			$values
-		);
+		foreach ( $batch_user_ids as $user_id ) {
+			$insert_result = $wpdb->insert(
+				$user_groups_table,
+				array(
+					'user_id'  => $user_id,
+					'group_id' => $group_id,
+				),
+				array( '%d', '%d' )
+			);
+			if ( false === $insert_result ) {
+				return false;
+			}
+		}
 
-		return $wpdb->query( $query );
+		return count( $batch_user_ids );
 	}
 }

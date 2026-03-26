@@ -52,7 +52,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p class="description"><?php esc_html_e( 'Hold Ctrl (Windows) or Cmd (Mac) to select multiple. Product rules override category rules.', 'alynt-customer-groups' ); ?></p>
 					<select id="wccg-edit-products" multiple size="8">
 						<?php foreach ( $all_products as $product ) : ?>
-							<option value="<?php echo esc_attr( $product->get_id() ); ?>"><?php echo esc_html( $product->get_name() ); ?> (<?php echo esc_html( get_woocommerce_currency_symbol() . $product->get_regular_price() ); ?>)</option>
+							<option value="<?php echo esc_attr( $product['id'] ); ?>"><?php echo esc_html( $product['text'] ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</div>
@@ -61,8 +61,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<p class="description"><?php esc_html_e( 'Hold Ctrl (Windows) or Cmd (Mac) to select multiple. Applies to all products in selected categories.', 'alynt-customer-groups' ); ?></p>
 					<select id="wccg-edit-categories" multiple size="8">
 						<?php foreach ( $all_categories as $category ) : ?>
-							<?php $depth = count( get_ancestors( $category->term_id, 'product_cat', 'taxonomy' ) ); ?>
-							<option value="<?php echo esc_attr( $category->term_id ); ?>"><?php echo esc_html( str_repeat( '— ', $depth ) . $category->name ); ?></option>
+							<option value="<?php echo esc_attr( $category['id'] ); ?>"><?php echo esc_html( $category['text'] ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</div>
@@ -75,4 +74,3 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</div>
 	</div>
 </div>
-

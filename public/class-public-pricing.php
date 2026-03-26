@@ -19,10 +19,47 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Public_Pricing {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Public_Pricing|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
 	private $db;
+
+	/**
+	 * Shared utility helper.
+	 *
+	 * @var WCCG_Utilities
+	 */
 	private $utils;
+
+	/**
+	 * Cached adjusted prices by product/user key.
+	 *
+	 * @var array<string,float|false>
+	 */
 	private $price_cache = array();
+
+	/**
+	 * Cached group label HTML by user/default key.
+	 *
+	 * @var array<string,string>
+	 */
+	private $group_label_cache = array();
+
+	/**
+	 * Tracks variable products primed for rule lookup.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $primed_variable_products = array();
 
 	/**
 	 * Return the singleton instance of this class.
@@ -38,6 +75,12 @@ class WCCG_Public_Pricing {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize pricing dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->db    = WCCG_Database::instance();
 		$this->utils = WCCG_Utilities::instance();
@@ -131,7 +174,8 @@ class WCCG_Public_Pricing {
 	public function adjust_variation_data( $variation_data, $product, $variation ) {
 		$user_id           = get_current_user_id();
 		$effective_user_id = $user_id ? $user_id : 0;
-		$pricing_rule      = $this->db->get_pricing_rule_for_product( $variation->get_id(), $effective_user_id );
+		$this->prime_variable_product_rules( $product, $effective_user_id );
+		$pricing_rule = $this->db->get_pricing_rule_for_product( $variation->get_id(), $effective_user_id );
 		if ( ! $pricing_rule ) {
 			return $variation_data;
 		}
@@ -191,6 +235,7 @@ class WCCG_Public_Pricing {
 	 * @return string Modified price HTML, or the original if no discount applies.
 	 */
 	public function display_cart_item_price( $price_html, $cart_item, $cart_item_key ) {
+		unset( $cart_item_key );
 		$product        = $cart_item['data'];
 		$adjusted_price = $this->get_adjusted_price( $product );
 		if ( $adjusted_price === false ) {
@@ -215,6 +260,7 @@ class WCCG_Public_Pricing {
 	 * @return string Modified subtotal HTML, or the original if no discount applies.
 	 */
 	public function display_cart_item_subtotal( $subtotal_html, $cart_item, $cart_item_key ) {
+		unset( $cart_item_key );
 		$product        = $cart_item['data'];
 		$adjusted_price = $this->get_adjusted_price( $product );
 		if ( $adjusted_price === false ) {
@@ -230,10 +276,19 @@ class WCCG_Public_Pricing {
 		return $subtotal_html;
 	}
 
+	/**
+	 * Build discounted price HTML for a variable product.
+	 *
+	 * @since  1.0.0
+	 * @param  string     $price_html Existing price HTML.
+	 * @param  WC_Product $product    Variable product object.
+	 * @return string
+	 */
 	private function adjust_variable_price_display( $price_html, $product ) {
 		$user_id           = get_current_user_id();
 		$effective_user_id = $user_id ? $user_id : 0;
-		$group_id          = $user_id ? $this->db->get_user_group( $user_id ) : null;
+		$this->prime_variable_product_rules( $product, $effective_user_id );
+		$group_id = $user_id ? $this->db->get_user_group( $user_id ) : null;
 		if ( ! $group_id ) {
 			$group_id = get_option( 'wccg_default_group_id', 0 );
 		}
@@ -267,6 +322,13 @@ class WCCG_Public_Pricing {
 		return sprintf( '<del>%1$s &ndash; %2$s</del> <ins>%3$s &ndash; %4$s</ins>%5$s', wc_price( $min_price ), wc_price( $max_price ), wc_price( $discounted_min ), wc_price( $discounted_max ), $label_html );
 	}
 
+	/**
+	 * Return an adjusted product price for the current customer context.
+	 *
+	 * @since  1.0.0
+	 * @param  WC_Product $product Product object.
+	 * @return float|false
+	 */
 	private function get_adjusted_price( $product ) {
 		$user_id           = get_current_user_id();
 		$effective_user_id = $user_id ? $user_id : 0;
@@ -292,8 +354,16 @@ class WCCG_Public_Pricing {
 		return $adjusted_price;
 	}
 
+	/**
+	 * Calculate the discounted price for a rule.
+	 *
+	 * @since  1.0.0
+	 * @param  float  $original_price Original product price.
+	 * @param  object $pricing_rule   Pricing rule object.
+	 * @return float
+	 */
 	private function calculate_discounted_price( $original_price, $pricing_rule ) {
-		$discount_amount = $pricing_rule->discount_type === 'percentage'
+		$discount_amount = 'percentage' === $pricing_rule->discount_type
 			? ( $pricing_rule->discount_value / 100 ) * $original_price
 			: $pricing_rule->discount_value;
 
@@ -313,12 +383,31 @@ class WCCG_Public_Pricing {
 		return $adjusted_price;
 	}
 
+	/**
+	 * Return the base product price before group adjustments.
+	 *
+	 * @since  1.0.0
+	 * @param  WC_Product $product Product object.
+	 * @return string
+	 */
 	private function get_base_price( $product ) {
 		$sale_price = $product->get_sale_price();
 		return ! empty( $sale_price ) && $sale_price > 0 ? $sale_price : $product->get_regular_price();
 	}
 
+	/**
+	 * Build the HTML label showing the applicable pricing group.
+	 *
+	 * @since  1.0.0
+	 * @param  int $user_id Current user ID, or 0 for guests/default pricing.
+	 * @return string
+	 */
 	private function build_group_label_html( $user_id ) {
+		$cache_key = $user_id > 0 ? 'user:' . absint( $user_id ) : 'default';
+		if ( array_key_exists( $cache_key, $this->group_label_cache ) ) {
+			return $this->group_label_cache[ $cache_key ];
+		}
+
 		$group_name = $user_id ? $this->db->get_user_group_name( $user_id ) : null;
 		if ( ! $group_name && get_option( 'wccg_default_group_id', 0 ) ) {
 			$custom_title = get_option( 'wccg_default_group_custom_title', '' );
@@ -328,7 +417,8 @@ class WCCG_Public_Pricing {
 				global $wpdb;
 				$group_name = $wpdb->get_var(
 					$wpdb->prepare(
-						"SELECT group_name FROM {$wpdb->prefix}customer_groups WHERE group_id = %d",
+						// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names cannot be parameterized; placeholders are used for dynamic values.
+						'SELECT group_name FROM ' . $wpdb->prefix . 'customer_groups WHERE group_id = %d',
 						get_option( 'wccg_default_group_id', 0 )
 					)
 				);
@@ -336,13 +426,42 @@ class WCCG_Public_Pricing {
 		}
 
 		if ( ! $group_name ) {
-			return '';
+			$this->group_label_cache[ $cache_key ] = '';
+			return $this->group_label_cache[ $cache_key ];
 		}
 
-		/* translators: %s: pricing group name. */
-		return sprintf(
+		$this->group_label_cache[ $cache_key ] = sprintf(
 			' <span class="special-price-label">%s</span>',
-			sprintf( __( '%s Pricing', 'alynt-customer-groups' ), $this->utils->escape_output( $group_name ) )
+			sprintf(
+				/* translators: %s: pricing group name. */
+				__( '%s Pricing', 'alynt-customer-groups' ),
+				$this->utils->escape_output( $group_name )
+			)
 		);
+
+		return $this->group_label_cache[ $cache_key ];
+	}
+
+	/**
+	 * Prime pricing rules for a variable product and its children.
+	 *
+	 * @since  1.0.0
+	 * @param  WC_Product $product           Variable product object.
+	 * @param  int        $effective_user_id Effective user ID used for pricing lookup.
+	 * @return void
+	 */
+	private function prime_variable_product_rules( $product, $effective_user_id ) {
+		if ( ! $product || ! $product->is_type( 'variable' ) ) {
+			return;
+		}
+
+		$cache_key = $product->get_id() . '_' . absint( $effective_user_id );
+		if ( isset( $this->primed_variable_products[ $cache_key ] ) ) {
+			return;
+		}
+
+		$product_ids = array_merge( array( $product->get_id() ), $product->get_children() );
+		$this->db->prime_pricing_rules_for_products( $product_ids, $effective_user_id );
+		$this->primed_variable_products[ $cache_key ] = true;
 	}
 }

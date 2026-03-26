@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 class Test_Sample extends TestCase {
     public function test_plugin_bootstrap_constants_are_defined() {
-        $this->assertSame( '1.1.0', WCCG_VERSION );
+        $this->assertSame( '1.2.0', WCCG_VERSION );
         $this->assertTrue( class_exists( 'WCCG_Autoloader' ) );
     }
 }

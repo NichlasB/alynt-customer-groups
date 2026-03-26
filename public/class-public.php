@@ -17,8 +17,25 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Public {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Public|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Frontend pricing service.
+	 *
+	 * @var WCCG_Public_Pricing
+	 */
 	private $pricing;
+
+	/**
+	 * Frontend banner service.
+	 *
+	 * @var WCCG_Public_Banner
+	 */
 	private $banner;
 
 	/**
@@ -35,12 +52,24 @@ class WCCG_Public {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize frontend dependencies and hooks.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->pricing = WCCG_Public_Pricing::instance();
 		$this->banner  = WCCG_Public_Banner::instance();
 		$this->init_hooks();
 	}
 
+	/**
+	 * Register frontend WooCommerce and theme hooks.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function init_hooks() {
 		/**
 		 * Fires before WooCommerce recalculates cart totals.

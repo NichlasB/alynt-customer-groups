@@ -102,12 +102,22 @@ class WCCG_Admin_Pricing_Rules_Actions {
 
 		$action = sanitize_text_field( wp_unslash( $_POST['action'] ) );
 
-		if ( 'save_rule' === $action ) {
-			$this->handle_save_rule();
-		}
-
-		if ( 'delete_rule' === $action ) {
-			$this->handle_delete_rule();
+		switch ( $action ) {
+			case 'save_rule':
+				$this->handle_save_rule();
+				break;
+			case 'delete_rule':
+				$this->handle_delete_rule();
+				break;
+			case 'enable_all_rules':
+				$this->handle_bulk_status_change( 1 );
+				break;
+			case 'disable_all_rules':
+				$this->handle_bulk_status_change( 0 );
+				break;
+			case 'delete_all_rules':
+				$this->handle_delete_all_rules();
+				break;
 		}
 	}
 
@@ -141,6 +151,11 @@ class WCCG_Admin_Pricing_Rules_Actions {
 	private function handle_save_rule() {
 		check_admin_referer( 'wccg_pricing_rules_action', 'wccg_pricing_rules_nonce' );
 
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			$this->add_admin_notice( 'error', __( 'You do not have permission to save pricing rules.', 'alynt-customer-groups' ) );
+			return;
+		}
+
 		$this->form_values = $this->extract_form_values();
 
 		if ( $this->form_values['group_id'] === 0 ) {
@@ -154,8 +169,19 @@ class WCCG_Admin_Pricing_Rules_Actions {
 			return;
 		}
 
+		if ( $this->is_duplicate_submission( 'save_rule', $this->form_values ) ) {
+			$this->add_admin_notice( 'warning', __( 'This pricing rule submission was already processed. Refresh the page before trying again.', 'alynt-customer-groups' ) );
+			return;
+		}
+
 		$start_date = ! empty( $this->form_values['start_date'] ) ? $this->writer->convert_to_utc( $this->form_values['start_date'] ) : null;
 		$end_date   = ! empty( $this->form_values['end_date'] ) ? $this->writer->convert_to_utc( $this->form_values['end_date'] ) : null;
+		if ( is_wp_error( $start_date ) || is_wp_error( $end_date ) ) {
+			$error = is_wp_error( $start_date ) ? $start_date : $end_date;
+			$this->add_admin_notice( 'error', $error->get_error_message() );
+			return;
+		}
+
 		if ( $start_date && $end_date && $end_date <= $start_date ) {
 			$this->add_admin_notice( 'error', __( 'End date must be after start date.', 'alynt-customer-groups' ) );
 			return;
@@ -223,6 +249,43 @@ class WCCG_Admin_Pricing_Rules_Actions {
 	}
 
 	/**
+	 * Enable or disable all pricing rules in bulk.
+	 *
+	 * @since  1.0.0
+	 * @param  int $status Target active status.
+	 * @return void
+	 */
+	private function handle_bulk_status_change( $status ) {
+		check_admin_referer( 'wccg_pricing_rules_action', 'wccg_pricing_rules_nonce' );
+
+		$result = $this->writer->bulk_update_pricing_rule_status( $status );
+		if ( false !== $result ) {
+			$this->add_admin_notice( 'success', $status ? __( 'All pricing rules enabled successfully.', 'alynt-customer-groups' ) : __( 'All pricing rules disabled successfully.', 'alynt-customer-groups' ) );
+			return;
+		}
+
+		$this->add_admin_notice( 'error', __( 'Could not update the pricing rules. Please try again.', 'alynt-customer-groups' ) );
+	}
+
+	/**
+	 * Delete all pricing rules in bulk.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	private function handle_delete_all_rules() {
+		check_admin_referer( 'wccg_pricing_rules_action', 'wccg_pricing_rules_nonce' );
+
+		$result = $this->writer->delete_all_pricing_rules();
+		if ( false !== $result ) {
+			$this->add_admin_notice( 'success', __( 'All pricing rules deleted successfully.', 'alynt-customer-groups' ) );
+			return;
+		}
+
+		$this->add_admin_notice( 'error', __( 'Could not delete the pricing rules. Please try again.', 'alynt-customer-groups' ) );
+	}
+
+	/**
 	 * Extract and sanitize pricing rule form values from the current request.
 	 *
 	 * @since  1.0.0
@@ -258,5 +321,25 @@ class WCCG_Admin_Pricing_Rules_Actions {
 	 */
 	private function add_admin_notice( $type, $message ) {
 		add_settings_error( 'wccg_pricing_rules', 'wccg_notice', $message, $type );
+	}
+
+	/**
+	 * Detect duplicate submissions within a short time window.
+	 *
+	 * @since  1.0.0
+	 * @param  string $action  Action identifier.
+	 * @param  array  $payload Submitted payload values.
+	 * @return bool True when the submission was already processed.
+	 */
+	private function is_duplicate_submission( $action, $payload ) {
+		$user_id = get_current_user_id();
+		$key     = 'wccg_submit_' . md5( $action . '|' . $user_id . '|' . wp_json_encode( $payload ) );
+
+		if ( get_transient( $key ) ) {
+			return true;
+		}
+
+		set_transient( $key, 1, MINUTE_IN_SECONDS );
+		return false;
 	}
 }

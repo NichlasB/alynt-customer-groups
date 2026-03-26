@@ -17,6 +17,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Input_Sanitizer {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Input_Sanitizer|null
+	 */
 	private static $instance = null;
 
 	/**
@@ -132,6 +137,13 @@ class WCCG_Input_Sanitizer {
 		}
 	}
 
+	/**
+	 * Validate that a submitted group ID exists in the customer_groups table.
+	 *
+	 * @since  1.0.0
+	 * @param  mixed $data Raw submitted group ID.
+	 * @return int Sanitized group ID, or 0 if it does not exist.
+	 */
 	private function sanitize_group_id( $data ) {
 		global $wpdb;
 

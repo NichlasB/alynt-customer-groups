@@ -27,14 +27,8 @@ class WCCG_Admin_Pricing_Rules_View_Helper {
 	 * @return string Group name, or 'Unknown Group' if the ID does not exist.
 	 */
 	public static function get_group_name_by_id( $group_id ) {
-		global $wpdb;
-
-		$name = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT group_name FROM {$wpdb->prefix}customer_groups WHERE group_id = %d",
-				$group_id
-			)
-		);
+		$group_names = self::get_group_names_by_ids( array( $group_id ) );
+		$name        = isset( $group_names[ $group_id ] ) ? $group_names[ $group_id ] : '';
 
 		return $name ? $name : __( 'Unknown Group', 'alynt-customer-groups' );
 	}
@@ -100,28 +94,44 @@ class WCCG_Admin_Pricing_Rules_View_Helper {
 	 *
 	 * @since  1.0.0
 	 * @param  object[] $pricing_rules Keyed array of stdClass rule rows from WCCG_Admin_Pricing_Rules_Page.
+	 * @param  array    $group_names   Optional preloaded map of group IDs to group names.
 	 * @return array[] Array of associative arrays, each containing display-ready rule data.
 	 */
-	public static function build_pricing_rules_view( $pricing_rules ) {
-		$rules_view = array();
+	public static function build_pricing_rules_view( $pricing_rules, $group_names = array() ) {
+		$rules_view       = array();
+		$all_group_ids    = array();
+		$all_product_ids  = array();
+		$all_category_ids = array();
 
 		foreach ( $pricing_rules as $rule ) {
-			$product_ids    = ! empty( $rule->product_ids ) ? array_filter( array_map( 'intval', explode( ',', $rule->product_ids ) ) ) : array();
-			$category_ids   = ! empty( $rule->category_ids ) ? array_filter( array_map( 'intval', explode( ',', $rule->category_ids ) ) ) : array();
-			$product_names  = array();
-			$category_names = array();
+			$all_group_ids[] = (int) $rule->group_id;
+			if ( ! empty( $rule->product_ids ) ) {
+				$all_product_ids = array_merge( $all_product_ids, array_map( 'intval', explode( ',', $rule->product_ids ) ) );
+			}
+			if ( ! empty( $rule->category_ids ) ) {
+				$all_category_ids = array_merge( $all_category_ids, array_map( 'intval', explode( ',', $rule->category_ids ) ) );
+			}
+		}
+
+		$group_names    = ! empty( $group_names ) ? $group_names : self::get_group_names_by_ids( $all_group_ids );
+		$product_names  = self::get_product_names_by_ids( $all_product_ids );
+		$category_names = self::get_category_names_by_ids( $all_category_ids );
+
+		foreach ( $pricing_rules as $rule ) {
+			$product_ids     = ! empty( $rule->product_ids ) ? array_filter( array_map( 'intval', explode( ',', $rule->product_ids ) ) ) : array();
+			$category_ids    = ! empty( $rule->category_ids ) ? array_filter( array_map( 'intval', explode( ',', $rule->category_ids ) ) ) : array();
+			$rule_products   = array();
+			$rule_categories = array();
 
 			foreach ( $product_ids as $product_id ) {
-				$product = wc_get_product( $product_id );
-				if ( $product ) {
-					$product_names[] = $product->get_name();
+				if ( isset( $product_names[ $product_id ] ) ) {
+					$rule_products[] = $product_names[ $product_id ];
 				}
 			}
 
 			foreach ( $category_ids as $category_id ) {
-				$category = get_term( $category_id, 'product_cat' );
-				if ( $category && ! is_wp_error( $category ) ) {
-					$category_names[] = $category->name;
+				if ( isset( $category_names[ $category_id ] ) ) {
+					$rule_categories[] = $category_names[ $category_id ];
 				}
 			}
 
@@ -130,11 +140,11 @@ class WCCG_Admin_Pricing_Rules_View_Helper {
 
 			$rules_view[] = array(
 				'rule_id'                => (int) $rule->rule_id,
-				'group_name'             => self::get_group_name_by_id( $rule->group_id ),
+				'group_name'             => isset( $group_names[ $rule->group_id ] ) ? $group_names[ $rule->group_id ] : __( 'Unknown Group', 'alynt-customer-groups' ),
 				'discount_type'          => $rule->discount_type,
 				'discount_value_display' => $rule->discount_type === 'percentage' ? $rule->discount_value . '%' : get_woocommerce_currency_symbol() . $rule->discount_value,
-				'product_names'          => $product_names,
-				'category_names'         => $category_names,
+				'product_names'          => $rule_products,
+				'category_names'         => $rule_categories,
 				'is_active'              => $is_active,
 				'created_at'             => $rule->created_at,
 				'start_date'             => $rule->start_date,
@@ -146,5 +156,172 @@ class WCCG_Admin_Pricing_Rules_View_Helper {
 		}
 
 		return $rules_view;
+	}
+
+	/**
+	 * Fetch customer group names keyed by group ID.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $group_ids Customer group IDs.
+	 * @return array<int,string> Group names keyed by group ID.
+	 */
+	public static function get_group_names_by_ids( $group_ids ) {
+		global $wpdb;
+
+		$group_ids = array_values( array_unique( array_filter( array_map( 'absint', $group_ids ) ) ) );
+		if ( empty( $group_ids ) ) {
+			return array();
+		}
+
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT group_id, group_name FROM {$wpdb->prefix}customer_groups WHERE group_id IN (" . implode( ',', array_fill( 0, count( $group_ids ), '%d' ) ) . ')',
+				...$group_ids
+			)
+		);
+
+		$group_names = array();
+		foreach ( $results as $group ) {
+			$group_names[ (int) $group->group_id ] = $group->group_name;
+		}
+
+		return $group_names;
+	}
+
+	/**
+	 * Build select2-compatible product option arrays for the supplied product IDs.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $product_ids Product IDs.
+	 * @return array[] Product option arrays with id and text keys.
+	 */
+	public static function get_product_options_by_ids( $product_ids ) {
+		$product_ids = array_values( array_unique( array_filter( array_map( 'absint', $product_ids ) ) ) );
+		if ( empty( $product_ids ) ) {
+			return array();
+		}
+
+		$products = wc_get_products(
+			array(
+				'include' => $product_ids,
+				'limit'   => count( $product_ids ),
+				'orderby' => 'include',
+			)
+		);
+
+		$options = array();
+		foreach ( $products as $product ) {
+			$options[] = array(
+				'id'   => (int) $product->get_id(),
+				'text' => sprintf(
+					'%1$s (%2$s)',
+					$product->get_name(),
+					get_woocommerce_currency_symbol() . $product->get_regular_price()
+				),
+			);
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Build select2-compatible category option arrays for the supplied category IDs.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $category_ids Product category term IDs.
+	 * @return array[] Category option arrays with id and text keys.
+	 */
+	public static function get_category_options_by_ids( $category_ids ) {
+		$category_ids = array_values( array_unique( array_filter( array_map( 'absint', $category_ids ) ) ) );
+		if ( empty( $category_ids ) ) {
+			return array();
+		}
+
+		$terms = get_terms(
+			array(
+				'taxonomy'   => 'product_cat',
+				'hide_empty' => false,
+				'include'    => $category_ids,
+				'orderby'    => 'include',
+			)
+		);
+
+		if ( is_wp_error( $terms ) ) {
+			return array();
+		}
+
+		$options = array();
+		foreach ( $terms as $term ) {
+			$depth     = count( get_ancestors( $term->term_id, 'product_cat', 'taxonomy' ) );
+			$options[] = array(
+				'id'   => (int) $term->term_id,
+				'text' => str_repeat( '- ', $depth ) . $term->name,
+			);
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Fetch product names keyed by product ID.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $product_ids Product IDs.
+	 * @return array<int,string> Product names keyed by product ID.
+	 */
+	private static function get_product_names_by_ids( $product_ids ) {
+		$product_ids = array_values( array_unique( array_filter( array_map( 'absint', $product_ids ) ) ) );
+		if ( empty( $product_ids ) ) {
+			return array();
+		}
+
+		$products      = wc_get_products(
+			array(
+				'include' => $product_ids,
+				'limit'   => count( $product_ids ),
+				'orderby' => 'include',
+			)
+		);
+		$product_names = array();
+
+		foreach ( $products as $product ) {
+			$product_names[ (int) $product->get_id() ] = $product->get_name();
+		}
+
+		return $product_names;
+	}
+
+	/**
+	 * Fetch category names keyed by category ID.
+	 *
+	 * @since  1.0.0
+	 * @param  int[] $category_ids Product category term IDs.
+	 * @return array<int,string> Category names keyed by category ID.
+	 */
+	private static function get_category_names_by_ids( $category_ids ) {
+		$category_ids = array_values( array_unique( array_filter( array_map( 'absint', $category_ids ) ) ) );
+		if ( empty( $category_ids ) ) {
+			return array();
+		}
+
+		$terms = get_terms(
+			array(
+				'taxonomy'   => 'product_cat',
+				'hide_empty' => false,
+				'include'    => $category_ids,
+				'orderby'    => 'include',
+			)
+		);
+
+		if ( is_wp_error( $terms ) ) {
+			return array();
+		}
+
+		$category_names = array();
+		foreach ( $terms as $term ) {
+			$category_names[ (int) $term->term_id ] = $term->name;
+		}
+
+		return $category_names;
 	}
 }

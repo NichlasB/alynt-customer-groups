@@ -15,7 +15,20 @@ defined( 'ABSPATH' ) || exit;
  * @since   1.0.0
  */
 class WCCG_Plugin_Dependencies {
-	private static $instance   = null;
+	/**
+	 * Singleton instance.
+	 *
+	 * @since 1.0.0
+	 * @var WCCG_Plugin_Dependencies|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * Stored plugin version detected before upgrade checks.
+	 *
+	 * @since 1.0.0
+	 * @var string
+	 */
 	private $installed_version = '';
 
 	/**

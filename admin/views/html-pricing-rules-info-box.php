@@ -41,6 +41,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 			</div>
 		<?php endif; ?>
 	</div>
+	<?php if ( ! empty( $conflicts_notice ) ) : ?>
+		<p class="description"><?php echo esc_html( $conflicts_notice ); ?></p>
+	<?php endif; ?>
 	<?php if ( ! empty( $conflicts ) ) : ?>
 		<p class="wccg-conflict-notice">
 			<span class="dashicons dashicons-warning" aria-hidden="true"></span>
@@ -48,4 +51,3 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</p>
 	<?php endif; ?>
 </div>
-

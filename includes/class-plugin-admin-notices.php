@@ -25,6 +25,7 @@ class WCCG_Plugin_Admin_Notices {
 	public function php_version_notice() {
 		$this->display_error_notice(
 			sprintf(
+				/* translators: %s: minimum supported PHP version. */
 				esc_html__( 'Alynt Customer Groups requires PHP version %s or higher.', 'alynt-customer-groups' ),
 				'7.4'
 			)
@@ -40,6 +41,7 @@ class WCCG_Plugin_Admin_Notices {
 	public function wp_version_notice() {
 		$this->display_error_notice(
 			sprintf(
+				/* translators: %s: minimum supported WordPress version. */
 				esc_html__( 'Alynt Customer Groups requires WordPress version %s or higher.', 'alynt-customer-groups' ),
 				'5.8'
 			)
@@ -65,6 +67,7 @@ class WCCG_Plugin_Admin_Notices {
 	public function woocommerce_version_notice() {
 		$this->display_error_notice(
 			sprintf(
+				/* translators: %s: minimum supported WooCommerce version. */
 				esc_html__( 'Alynt Customer Groups requires WooCommerce version %s or higher.', 'alynt-customer-groups' ),
 				'5.0'
 			)
@@ -81,7 +84,7 @@ class WCCG_Plugin_Admin_Notices {
 	protected function display_error_notice( $message ) {
 		?>
 		<div class="notice notice-error">
-			<p><?php echo $message; ?></p>
+			<p><?php echo wp_kses_post( $message ); ?></p>
 		</div>
 		<?php
 	}

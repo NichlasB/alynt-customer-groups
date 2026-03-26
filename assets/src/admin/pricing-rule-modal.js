@@ -4,6 +4,43 @@ export function initPricingRuleModal($) {
     let $lastFocused = null;
 
     const getFocusableElements = () => $modal.find('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])').filter(':visible:not([disabled])');
+    const buildRemoteSelectConfig = (action, placeholder) => ({
+        placeholder,
+        allowClear: true,
+        width: '100%',
+        closeOnSelect: false,
+        minimumInputLength: 1,
+        ajax: {
+            url: wccg_pricing_rules.ajax_url,
+            dataType: 'json',
+            delay: 250,
+            cache: true,
+            data(params) {
+                return {
+                    action,
+                    nonce: wccg_pricing_rules.nonce,
+                    term: params.term || ''
+                };
+            },
+            processResults(response) {
+                const results = response && response.success && response.data && Array.isArray(response.data.results)
+                    ? response.data.results
+                    : [];
+
+                return { results };
+            }
+        }
+    });
+    const hydrateRemoteSelect = ($select, options) => {
+        $select.empty();
+
+        (options || []).forEach((option) => {
+            const optionNode = new Option(option.text, option.id, true, true);
+            $select.append(optionNode);
+        });
+
+        $select.trigger('change');
+    };
 
     const getFriendlyError = (jqXHR, fallbackMessage) => {
         if (jqXHR && jqXHR.status === 403) {
@@ -26,7 +63,7 @@ export function initPricingRuleModal($) {
         const $message = $modal.find('.wccg-modal-message');
         $message.attr('role', type === 'error' ? 'alert' : 'status');
         const color = type === 'error' ? '#dc3232' : (type === 'success' ? '#46b450' : '#666');
-        $message.html('<span style="color: ' + color + ';">' + message + '</span>');
+        $message.empty().append($('<span>').css('color', color).text(message));
     };
 
     const closeModal = () => {
@@ -36,10 +73,26 @@ export function initPricingRuleModal($) {
             }
         });
         $('body').removeClass('wccg-modal-open');
-        $modal.find('.wccg-modal-message').attr('role', 'status').html('');
+        $modal.find('.wccg-modal-message').attr('role', 'status').empty();
         $modal.find('.wccg-modal-save').prop('disabled', false).text(strings.save_changes || 'Save Changes').removeAttr('aria-busy');
+        hydrateRemoteSelect($('#wccg-edit-products'), []);
+        hydrateRemoteSelect($('#wccg-edit-categories'), []);
         $modal.removeAttr('aria-busy');
     };
+
+    const $productSelect = $('#wccg-edit-products');
+    const $categorySelect = $('#wccg-edit-categories');
+    const hasSelect2 = typeof $.fn.select2 === 'function';
+    if ($productSelect.hasClass('select2-hidden-accessible')) {
+        $productSelect.select2('destroy');
+    }
+    if ($categorySelect.hasClass('select2-hidden-accessible')) {
+        $categorySelect.select2('destroy');
+    }
+    if (hasSelect2) {
+        $productSelect.select2(buildRemoteSelectConfig('wccg_search_products', strings.search_products_placeholder || 'Search and select products...'));
+        $categorySelect.select2(buildRemoteSelectConfig('wccg_search_categories', strings.search_categories_placeholder || 'Search and select categories...'));
+    }
 
     $(document).off('click.wccg', '.wccg-edit-rule-btn').on('click.wccg', '.wccg-edit-rule-btn', function() {
         const ruleId = $(this).data('rule-id');
@@ -73,9 +126,9 @@ export function initPricingRuleModal($) {
                 $('#wccg-edit-group').val(rule.group_id);
                 $('#wccg-edit-discount-type').val(rule.discount_type).trigger('change');
                 $('#wccg-edit-discount-value').val(rule.discount_value);
-                $('#wccg-edit-products').val(response.data.product_ids.map(String));
-                $('#wccg-edit-categories').val(response.data.category_ids.map(String));
-                $modal.find('.wccg-modal-message').attr('role', 'status').html('');
+                hydrateRemoteSelect($productSelect, response.data.product_options || []);
+                hydrateRemoteSelect($categorySelect, response.data.category_options || []);
+                $modal.find('.wccg-modal-message').attr('role', 'status').empty();
                 $modal.find('.wccg-modal-save').prop('disabled', false);
             },
             error(jqXHR, textStatus) {
@@ -190,14 +243,19 @@ export function initPricingRuleModal($) {
 
                 const $ruleRow = $('tr[data-rule-id="' + payload.rule_id + '"]').first();
                 $ruleRow.find('td:eq(2)').text(response.data.group_name);
-                let discountTypeHtml = response.data.discount_type;
+                const $typeCell = $ruleRow.find('td:eq(3)').empty().append(document.createTextNode(response.data.discount_type));
                 if (response.data.discount_type_raw === 'fixed') {
-                    discountTypeHtml += ' <span class="dashicons dashicons-star-filled" aria-hidden="true" title="' + (strings.fixed_precedence_short || 'Fixed discounts take precedence') + '"></span>';
+                    $typeCell.append(' ').append($('<span>').addClass('dashicons dashicons-star-filled').attr({'aria-hidden': 'true', 'title': strings.fixed_precedence_short || 'Fixed discounts take precedence'}));
                 }
-                $ruleRow.find('td:eq(3)').html(discountTypeHtml);
                 $ruleRow.find('td:eq(4)').html(response.data.discount_value);
-                $ruleRow.find('td:eq(5)').html(response.data.product_names.length ? '<span class="rule-type-indicator product">' + (strings.product_rule || 'Product Rule') + '</span><br>' + response.data.product_names.join(', ') : '');
-                $ruleRow.find('td:eq(6)').html(response.data.category_names.length ? '<span class="rule-type-indicator category">' + (strings.category_rule || 'Category Rule') + '</span><br>' + response.data.category_names.join(', ') : '');
+                const $productCell = $ruleRow.find('td:eq(5)').empty();
+                if (response.data.product_names.length) {
+                    $productCell.append($('<span>').addClass('rule-type-indicator product').text(strings.product_rule || 'Product Rule')).append('<br>').append(document.createTextNode(response.data.product_names.join(', ')));
+                }
+                const $categoryCell = $ruleRow.find('td:eq(6)').empty();
+                if (response.data.category_names.length) {
+                    $categoryCell.append($('<span>').addClass('rule-type-indicator category').text(strings.category_rule || 'Category Rule')).append('<br>').append(document.createTextNode(response.data.category_names.join(', ')));
+                }
                 setStatusMessage('success', response.data.message);
                 setTimeout(closeModal, 1000);
             },

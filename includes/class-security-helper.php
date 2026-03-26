@@ -17,6 +17,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Security_Helper {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Security_Helper|null
+	 */
 	private static $instance = null;
 
 	/**
@@ -46,7 +51,8 @@ class WCCG_Security_Helper {
 			wp_die( esc_html__( 'Security check failed: nonce not set.', 'alynt-customer-groups' ) );
 		}
 
-		if ( ! wp_verify_nonce( $_REQUEST[ $request_key ], $nonce_name ) ) {
+		$nonce = sanitize_text_field( wp_unslash( $_REQUEST[ $request_key ] ) );
+		if ( ! wp_verify_nonce( $nonce, $nonce_name ) ) {
 			wp_die( esc_html__( 'Security check failed: invalid nonce.', 'alynt-customer-groups' ) );
 		}
 
@@ -85,7 +91,7 @@ class WCCG_Security_Helper {
 	 */
 	public function verify_admin_access() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'alynt-customer-groups' ) );
+			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'alynt-customer-groups' ) );
 		}
 	}
 }

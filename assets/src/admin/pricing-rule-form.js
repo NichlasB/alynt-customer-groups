@@ -1,23 +1,52 @@
 export function initPricingRuleForm($) {
     const strings = (window.wccg_pricing_rules && window.wccg_pricing_rules.strings) || {};
+    const buildRemoteSelectConfig = (action, placeholder) => ({
+        placeholder,
+        allowClear: true,
+        width: '100%',
+        closeOnSelect: false,
+        minimumInputLength: 1,
+        ajax: {
+            url: wccg_pricing_rules.ajax_url,
+            dataType: 'json',
+            delay: 250,
+            cache: true,
+            data(params) {
+                return {
+                    action,
+                    nonce: wccg_pricing_rules.nonce,
+                    term: params.term || ''
+                };
+            },
+            processResults(response) {
+                const results = response && response.success && response.data && Array.isArray(response.data.results)
+                    ? response.data.results
+                    : [];
+
+                return { results };
+            }
+        }
+    });
 
     if (!$('body').hasClass('customer-groups_page_wccg_pricing_rules')) {
         return;
     }
 
-    $('#product-select').select2({
-        placeholder: strings.search_products_placeholder || 'Search and select products...',
-        allowClear: true,
-        width: '100%',
-        closeOnSelect: false
-    });
+    const $productSelect = $('#product-select');
+    const $categorySelect = $('#category-select');
+    if (typeof $.fn.select2 !== 'function') {
+        return;
+    }
 
-    $('#category-select').select2({
-        placeholder: strings.search_categories_placeholder || 'Search and select categories...',
-        allowClear: true,
-        width: '100%',
-        closeOnSelect: false
-    });
+    if ($productSelect.hasClass('select2-hidden-accessible')) {
+        $productSelect.select2('destroy');
+    }
+    if ($categorySelect.hasClass('select2-hidden-accessible')) {
+        $categorySelect.select2('destroy');
+    }
+
+    $productSelect.select2(buildRemoteSelectConfig('wccg_search_products', strings.search_products_placeholder || 'Search and select products...'));
+    $categorySelect.select2(buildRemoteSelectConfig('wccg_search_categories', strings.search_categories_placeholder || 'Search and select categories...'));
 
     $('#discount_type').off('change.wccg').on('change.wccg', function() {
         const $value = $('#discount_value');

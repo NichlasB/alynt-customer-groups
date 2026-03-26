@@ -17,11 +17,39 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Utilities {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Utilities|null
+	 */
 	private static $instance = null;
 
+	/**
+	 * Security helper.
+	 *
+	 * @var WCCG_Security_Helper
+	 */
 	private $security;
+
+	/**
+	 * Input sanitization helper.
+	 *
+	 * @var WCCG_Input_Sanitizer
+	 */
 	private $input;
+
+	/**
+	 * Rate limiting helper.
+	 *
+	 * @var WCCG_Rate_Limiter
+	 */
 	private $rate_limiter;
+
+	/**
+	 * Logging helper.
+	 *
+	 * @var WCCG_Logger
+	 */
 	private $logger;
 
 	/**
@@ -38,6 +66,12 @@ class WCCG_Utilities {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize helper dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->security     = WCCG_Security_Helper::instance();
 		$this->input        = WCCG_Input_Sanitizer::instance();

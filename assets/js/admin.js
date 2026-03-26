@@ -139,6 +139,10 @@
         },
 
         initProductSelection: function() {
+            if (typeof $.fn.select2 !== 'function') {
+                return;
+            }
+
             // Enable search in product/category selection
             $('select[name="product_ids[]"], select[name="category_ids[]"]').select2({
                 width: '100%',
@@ -211,10 +215,9 @@
                                 $scheduleCell.addClass('wccg-schedule-inactive');
                                 if (hasSchedule && !$scheduleCell.find('.wccg-schedule-warning').length) {
                                     $scheduleCell.append(
-                                        '<div class="wccg-schedule-warning">' +
-                                        '<span class="dashicons dashicons-warning"></span>' +
-                                        (strings.rule_inactive || 'Rule is inactive') +
-                                        '</div>'
+                                        $('<div>').addClass('wccg-schedule-warning')
+                                            .append($('<span>').addClass('dashicons dashicons-warning'))
+                                            .append(document.createTextNode(strings.rule_inactive || 'Rule is inactive'))
                                     );
                                 }
                             }
@@ -241,11 +244,10 @@
                                     // Add warning if doesn't exist
                                     if (!$warning.length) {
                                         $editForm.find('h4').after(
-                                            '<div class="wccg-inactive-rule-warning">' +
-                                            '<span class="dashicons dashicons-warning"></span>' +
-                                            '<strong>' + (strings.warning_label || 'Warning:') + '</strong> ' +
-                                            (strings.inactive_schedule_warning || 'This rule is currently inactive. The schedule will not take effect until you enable the rule using the toggle switch.') +
-                                            '</div>'
+                                            $('<div>').addClass('wccg-inactive-rule-warning')
+                                                .append($('<span>').addClass('dashicons dashicons-warning'))
+                                                .append($('<strong>').text(strings.warning_label || 'Warning:'))
+                                                .append(document.createTextNode(' ' + (strings.inactive_schedule_warning || 'This rule is currently inactive. The schedule will not take effect until you enable the rule using the toggle switch.')))
                                         );
                                     }
                                 }

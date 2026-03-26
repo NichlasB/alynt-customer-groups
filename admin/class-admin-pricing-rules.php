@@ -17,8 +17,25 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Admin_Pricing_Rules {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Admin_Pricing_Rules|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Pricing rules page renderer.
+	 *
+	 * @var WCCG_Admin_Pricing_Rules_Page
+	 */
 	private $page;
+
+	/**
+	 * Pricing rules AJAX handler.
+	 *
+	 * @var WCCG_Admin_Pricing_Rules_Ajax
+	 */
 	private $ajax;
 
 	/**
@@ -35,6 +52,12 @@ class WCCG_Admin_Pricing_Rules {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize pricing rules page dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->page = WCCG_Admin_Pricing_Rules_Page::instance();
 		$this->ajax = WCCG_Admin_Pricing_Rules_Ajax::instance();

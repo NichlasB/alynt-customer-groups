@@ -24,6 +24,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Rate_Limiter {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Rate_Limiter|null
+	 */
 	private static $instance = null;
 
 	/**
@@ -87,6 +92,13 @@ class WCCG_Rate_Limiter {
 		return true;
 	}
 
+	/**
+	 * Return the request policy for a given rate-limit action.
+	 *
+	 * @since  1.0.0
+	 * @param  string $action Rate-limit bucket name.
+	 * @return array{max_requests:int,time_window:int} Policy configuration.
+	 */
 	private function get_policy( $action ) {
 		switch ( $action ) {
 			case 'price_calc':

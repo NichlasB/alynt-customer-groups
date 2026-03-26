@@ -15,8 +15,28 @@ defined( 'ABSPATH' ) || exit;
  * @since   1.0.0
  */
 class WCCG_Plugin_Bootstrap {
+	/**
+	 * Singleton instance.
+	 *
+	 * @since 1.0.0
+	 * @var WCCG_Plugin_Bootstrap|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Main plugin instance.
+	 *
+	 * @since 1.0.0
+	 * @var WCCG_Customer_Groups|null
+	 */
 	private $plugin;
+
+	/**
+	 * Dependency checker instance.
+	 *
+	 * @since 1.0.0
+	 * @var WCCG_Plugin_Dependencies
+	 */
 	private $dependencies;
 
 	/**
@@ -33,6 +53,12 @@ class WCCG_Plugin_Bootstrap {
 		return self::$instance;
 	}
 
+	/**
+	 * Set up dependency services for the bootstrap singleton.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->dependencies = WCCG_Plugin_Dependencies::instance();
 	}
@@ -123,6 +149,8 @@ class WCCG_Plugin_Bootstrap {
 			return;
 		}
 
+		WCCG_Activator::maybe_sync_schema();
+
 		require_once WCCG_PATH . 'includes/class-wccg-autoloader.php';
 		new WCCG_Autoloader();
 
@@ -140,12 +168,24 @@ class WCCG_Plugin_Bootstrap {
 		}
 	}
 
+	/**
+	 * Initialize shared core service singletons.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function init_core_components() {
 		WCCG_Core::instance();
 		WCCG_Database::instance();
 		WCCG_Utilities::instance();
 	}
 
+	/**
+	 * Initialize admin-facing plugin components.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function init_admin() {
 		WCCG_Admin::instance();
 		WCCG_Admin_Customer_Groups::instance();
@@ -153,6 +193,12 @@ class WCCG_Plugin_Bootstrap {
 		WCCG_Admin_Pricing_Rules::instance();
 	}
 
+	/**
+	 * Initialize public-facing plugin components.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function init_public() {
 		WCCG_Public::instance();
 	}
@@ -180,7 +226,6 @@ class WCCG_Plugin_Bootstrap {
 	 * @return void
 	 */
 	public function init() {
-		return;
 	}
 
 	/**

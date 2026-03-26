@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<input type="date" id="date-to" name="date_to" value="<?php echo esc_attr( $params['date_to'] ); ?>">
 				<label for="per_page" class="screen-reader-text"><?php esc_html_e( 'Users per page', 'alynt-customer-groups' ); ?></label>
 				<select name="per_page" id="per_page">
-					<?php foreach ( array( 100, 200, 500, 1000 ) as $option ) : ?>
+					<?php foreach ( $per_page_options as $option ) : ?>
 						<option value="<?php echo esc_attr( $option ); ?>" <?php selected( $params['users_per_page'] === $option ); ?>>
 							<?php echo esc_html( $option . ' per page' ); ?>
 						</option>
@@ -113,11 +113,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<div class="alignleft actions bulkactions">
 				<h2><?php esc_html_e( 'Assign to Group', 'alynt-customer-groups' ); ?></h2>
 				<label for="assign_group_id" class="screen-reader-text"><?php esc_html_e( 'Assign to Group', 'alynt-customer-groups' ); ?></label>
-				<select name="group_id" id="assign_group_id" required>
-					<?php foreach ( $groups as $group ) : ?>
-						<option value="<?php echo esc_attr( $group->group_id ); ?>"><?php echo esc_html( $group->group_name ); ?></option>
-					<?php endforeach; ?>
-				</select>
+				<?php if ( empty( $groups ) ) : ?>
+					<p class="description"><?php esc_html_e( 'Create a customer group before assigning users.', 'alynt-customer-groups' ); ?></p>
+				<?php else : ?>
+					<select name="group_id" id="assign_group_id" required>
+						<?php foreach ( $groups as $group ) : ?>
+							<option value="<?php echo esc_attr( $group->group_id ); ?>"><?php echo esc_html( $group->group_name ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				<?php endif; ?>
 				<?php
 				submit_button(
 					__( 'Assign Selected Users', 'alynt-customer-groups' ),
@@ -127,6 +131,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					array(
 						'class'            => 'wccg-bulk-action-btn',
 						'data-action-type' => 'assign',
+						'disabled'         => empty( $groups ) ? 'disabled' : null,
 					)
 				);
 				?>

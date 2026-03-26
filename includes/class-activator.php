@@ -22,17 +22,66 @@ class WCCG_Activator {
 	 * Run all activation routines: create tables, migrate schema, schedule tasks, and record version.
 	 *
 	 * @since  1.0.0
+	 * @param  bool $network_wide Whether activation is running network-wide on multisite.
 	 * @return void
 	 */
-	public static function activate() {
+	public static function activate( $network_wide = false ) {
 		try {
-			self::create_tables();
-			self::backfill_pricing_rules_data();
-			self::schedule_tasks();
-			self::set_version();
+			if ( is_multisite() && $network_wide ) {
+				$site_ids = get_sites(
+					array(
+						'fields' => 'ids',
+					)
+				);
+
+				foreach ( $site_ids as $site_id ) {
+					switch_to_blog( (int) $site_id );
+					try {
+						self::run_activation_for_current_site();
+					} finally {
+						restore_current_blog();
+					}
+				}
+			} else {
+				self::run_activation_for_current_site();
+			}
 		} catch ( Exception $e ) {
 			error_log( 'WCCG Critical: Activation failed - ' . $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Ensure the database schema is synced for the current plugin code.
+	 *
+	 * @since  1.1.0
+	 * @return void
+	 */
+	public static function maybe_sync_schema() {
+		$schema_version = get_option( 'wccg_schema_version', '' );
+		if ( $schema_version === WCCG_VERSION ) {
+			return;
+		}
+
+		try {
+			self::create_tables();
+			self::backfill_pricing_rules_data();
+			update_option( 'wccg_schema_version', WCCG_VERSION );
+		} catch ( Exception $e ) {
+			error_log( 'WCCG Critical: Schema sync failed - ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Run activation routines for the currently selected site.
+	 *
+	 * @since  1.2.0
+	 * @return void
+	 */
+	private static function run_activation_for_current_site() {
+		self::create_tables();
+		self::backfill_pricing_rules_data();
+		self::schedule_tasks();
+		self::set_version();
 	}
 
 	/**
@@ -106,19 +155,24 @@ class WCCG_Activator {
                 KEY is_active (is_active),
                 KEY sort_order (sort_order),
                 KEY start_date (start_date),
-                KEY end_date (end_date)
+                KEY end_date (end_date),
+                KEY group_active_window (group_id, is_active, start_date, end_date),
+                KEY active_end_date (is_active, end_date),
+                KEY active_start_end (is_active, start_date, end_date)
             ) $charset_collate;",
 
 			$rule_products_table   => "CREATE TABLE IF NOT EXISTS $rule_products_table (
                 rule_id INT UNSIGNED NOT NULL,
                 product_id BIGINT(20) UNSIGNED NOT NULL,
-                PRIMARY KEY (rule_id, product_id)
+                PRIMARY KEY (rule_id, product_id),
+                KEY product_id (product_id)
             ) $charset_collate;",
 
 			$rule_categories_table => "CREATE TABLE IF NOT EXISTS $rule_categories_table (
                 rule_id INT UNSIGNED NOT NULL,
                 category_id BIGINT(20) UNSIGNED NOT NULL,
-                PRIMARY KEY (rule_id, category_id)
+                PRIMARY KEY (rule_id, category_id),
+                KEY category_id (category_id)
             ) $charset_collate;",
 		);
 
@@ -128,7 +182,7 @@ class WCCG_Activator {
 
 			$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) === $table;
 
-			if ( ! $table_exists && in_array( $table, $critical_tables ) ) {
+			if ( ! $table_exists && in_array( $table, $critical_tables, true ) ) {
 				$failed_tables[] = $table;
 			}
 		}
@@ -149,13 +203,13 @@ class WCCG_Activator {
 	 */
 	private static function backfill_pricing_rules_data() {
 		global $wpdb;
-		$table_name = $wpdb->prefix . 'pricing_rules';
-
-		$result = $wpdb->query(
-			"UPDATE {$table_name}
+		$pricing_rules_table = $wpdb->prefix . 'pricing_rules';
+		$result              = $wpdb->query(
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; this update uses a trusted prefixed table name and no user input.
+			'UPDATE ' . $pricing_rules_table . '
             SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
                 is_active = COALESCE(is_active, 1),
-                sort_order = CASE WHEN sort_order IS NULL OR sort_order = 0 THEN rule_id ELSE sort_order END"
+                sort_order = CASE WHEN sort_order IS NULL OR sort_order = 0 THEN rule_id ELSE sort_order END'
 		);
 
 		if ( $result === false ) {
@@ -188,6 +242,7 @@ class WCCG_Activator {
 	 */
 	private static function set_version() {
 		update_option( 'wccg_version', WCCG_VERSION );
+		update_option( 'wccg_schema_version', WCCG_VERSION );
 		update_option( 'wccg_installation_date', current_time( 'mysql' ) );
 	}
 }

@@ -17,9 +17,32 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Admin_Customer_Groups {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Admin_Customer_Groups|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
 	private $db;
+
+	/**
+	 * Shared utility helper.
+	 *
+	 * @var WCCG_Utilities
+	 */
 	private $utils;
+
+	/**
+	 * Form action handler.
+	 *
+	 * @var WCCG_Admin_Customer_Groups_Actions
+	 */
 	private $actions;
 
 	/**
@@ -36,6 +59,12 @@ class WCCG_Admin_Customer_Groups {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize customer groups page dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->db      = WCCG_Database::instance();
 		$this->utils   = WCCG_Utilities::instance();
@@ -55,6 +84,12 @@ class WCCG_Admin_Customer_Groups {
 		$this->render_page( $groups );
 	}
 
+	/**
+	 * Fetch all customer groups for display.
+	 *
+	 * @since  1.0.0
+	 * @return array<int,object> List of customer group records.
+	 */
 	private function get_groups() {
 		global $wpdb;
 
@@ -63,6 +98,13 @@ class WCCG_Admin_Customer_Groups {
 		);
 	}
 
+	/**
+	 * Render the customer groups admin screen.
+	 *
+	 * @since  1.0.0
+	 * @param  array<int,object> $groups Customer group records.
+	 * @return void
+	 */
 	private function render_page( $groups ) {
 		$persisted_notice = get_option( 'wccg_customer_groups_action_notice', array() );
 		if ( is_array( $persisted_notice ) && ! empty( $persisted_notice['type'] ) && ! empty( $persisted_notice['message'] ) ) {
@@ -90,4 +132,3 @@ class WCCG_Admin_Customer_Groups {
 		<?php
 	}
 }
-

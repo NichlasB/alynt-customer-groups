@@ -88,6 +88,8 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 		add_action( 'wp_ajax_wccg_update_rule_schedule', array( $this, 'ajax_update_rule_schedule' ) );
 		add_action( 'wp_ajax_wccg_update_pricing_rule', array( $this, 'ajax_update_pricing_rule' ) );
 		add_action( 'wp_ajax_wccg_get_rule_data', array( $this, 'ajax_get_rule_data' ) );
+		add_action( 'wp_ajax_wccg_search_products', array( $this, 'ajax_search_products' ) );
+		add_action( 'wp_ajax_wccg_search_categories', array( $this, 'ajax_search_categories' ) );
 	}
 
 	/**
@@ -191,6 +193,10 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 		}
 
 		$status = isset( $_POST['status'] ) ? intval( wp_unslash( $_POST['status'] ) ) : 1;
+		if ( $status !== 0 && $status !== 1 ) {
+			$this->send_error( 'invalid_status', __( 'Could not update the pricing rules. Refresh the page and try again.', 'alynt-customer-groups' ) );
+		}
+
 		global $wpdb;
 		$table  = $this->db->get_table_name( 'pricing_rules' );
 		$result = $this->writer->bulk_update_pricing_rule_status( $status );
@@ -228,6 +234,10 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 		}
 
 		$result = $this->writer->reorder_pricing_rules( $order );
+		if ( false === $result ) {
+			$this->log_database_error( 'reorder_pricing_rules', array( 'order' => $order ) );
+			$this->send_error( 'reorder_failed', __( 'Could not save the new rule order. Please try again.', 'alynt-customer-groups' ) );
+		}
 
 		wp_send_json_success( array( 'message' => __( 'Pricing rule order updated successfully.', 'alynt-customer-groups' ) ) );
 	}
@@ -260,6 +270,11 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 
 		$start_date = ! empty( $_POST['start_date'] ) ? $this->writer->convert_to_utc( sanitize_text_field( wp_unslash( $_POST['start_date'] ) ) ) : null;
 		$end_date   = ! empty( $_POST['end_date'] ) ? $this->writer->convert_to_utc( sanitize_text_field( wp_unslash( $_POST['end_date'] ) ) ) : null;
+		if ( is_wp_error( $start_date ) || is_wp_error( $end_date ) ) {
+			$error = is_wp_error( $start_date ) ? $start_date : $end_date;
+			$this->send_error( 'invalid_schedule', $error->get_error_message() );
+		}
+
 		if ( $start_date && $end_date && $end_date <= $start_date ) {
 			$this->send_error( 'invalid_schedule', __( 'End date must be after start date.', 'alynt-customer-groups' ) );
 		}
@@ -317,9 +332,88 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 		$category_ids = $this->db->get_pricing_rule_category_ids( $rule_id );
 		wp_send_json_success(
 			array(
-				'rule'         => $rule,
-				'product_ids'  => array_map( 'intval', $product_ids ),
-				'category_ids' => array_map( 'intval', $category_ids ),
+				'rule'             => $rule,
+				'product_ids'      => array_map( 'intval', $product_ids ),
+				'category_ids'     => array_map( 'intval', $category_ids ),
+				'product_options'  => WCCG_Admin_Pricing_Rules_View_Helper::get_product_options_by_ids( $product_ids ),
+				'category_options' => WCCG_Admin_Pricing_Rules_View_Helper::get_category_options_by_ids( $category_ids ),
+			)
+		);
+	}
+
+	/**
+	 * Search products for remote Select2 fields on the pricing rules screen.
+	 *
+	 * @since  1.1.0
+	 * @return void
+	 */
+	public function ajax_search_products() {
+		if ( ! check_ajax_referer( 'wccg_pricing_rules_ajax', 'nonce', false ) ) {
+			$this->send_error( 'invalid_nonce', __( 'Your session has expired. Reload the page and try again.', 'alynt-customer-groups' ), 403 );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			$this->send_error( 'forbidden', __( 'You do not have permission to manage pricing rules.', 'alynt-customer-groups' ), 403 );
+		}
+
+		$term        = isset( $_GET['term'] ) ? sanitize_text_field( wp_unslash( $_GET['term'] ) ) : '';
+		$product_ids = get_posts(
+			array(
+				'post_type'              => 'product',
+				'post_status'            => array( 'publish', 'private' ),
+				's'                      => $term,
+				'posts_per_page'         => 20,
+				'orderby'                => 'title',
+				'order'                  => 'ASC',
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+
+		wp_send_json_success(
+			array(
+				'results' => WCCG_Admin_Pricing_Rules_View_Helper::get_product_options_by_ids( $product_ids ),
+			)
+		);
+	}
+
+	/**
+	 * Search categories for remote Select2 fields on the pricing rules screen.
+	 *
+	 * @since  1.1.0
+	 * @return void
+	 */
+	public function ajax_search_categories() {
+		if ( ! check_ajax_referer( 'wccg_pricing_rules_ajax', 'nonce', false ) ) {
+			$this->send_error( 'invalid_nonce', __( 'Your session has expired. Reload the page and try again.', 'alynt-customer-groups' ), 403 );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			$this->send_error( 'forbidden', __( 'You do not have permission to manage pricing rules.', 'alynt-customer-groups' ), 403 );
+		}
+
+		$term       = isset( $_GET['term'] ) ? sanitize_text_field( wp_unslash( $_GET['term'] ) ) : '';
+		$categories = get_terms(
+			array(
+				'taxonomy'   => 'product_cat',
+				'hide_empty' => false,
+				'name__like' => $term,
+				'number'     => 20,
+				'orderby'    => 'name',
+				'order'      => 'ASC',
+				'fields'     => 'ids',
+			)
+		);
+
+		if ( is_wp_error( $categories ) ) {
+			$this->send_error( 'search_failed', __( 'Could not load categories. Please try again.', 'alynt-customer-groups' ) );
+		}
+
+		wp_send_json_success(
+			array(
+				'results' => WCCG_Admin_Pricing_Rules_View_Helper::get_category_options_by_ids( $categories ),
 			)
 		);
 	}
@@ -376,22 +470,21 @@ class WCCG_Admin_Pricing_Rules_Ajax {
 			$this->send_error( 'update_failed', __( 'Could not update the pricing rule. Please try again.', 'alynt-customer-groups' ) );
 		}
 
-		$group_name    = WCCG_Admin_Pricing_Rules_View_Helper::get_group_name_by_id( $group_id );
-		$product_names = array();
-		foreach ( $product_ids as $product_id ) {
-			$product = wc_get_product( $product_id );
-			if ( $product ) {
-				$product_names[] = $product->get_name();
-			}
-		}
-
-		$category_names = array();
-		foreach ( $category_ids as $category_id ) {
-			$category = get_term( $category_id, 'product_cat' );
-			if ( $category && ! is_wp_error( $category ) ) {
-				$category_names[] = $category->name;
-			}
-		}
+		$group_name       = WCCG_Admin_Pricing_Rules_View_Helper::get_group_name_by_id( $group_id );
+		$product_options  = WCCG_Admin_Pricing_Rules_View_Helper::get_product_options_by_ids( $product_ids );
+		$category_options = WCCG_Admin_Pricing_Rules_View_Helper::get_category_options_by_ids( $category_ids );
+		$product_names    = array_map(
+			static function ( $product_option ) {
+				return preg_replace( '/\s+\([^)]*\)$/', '', $product_option['text'] );
+			},
+			$product_options
+		);
+		$category_names   = array_map(
+			static function ( $category_option ) {
+				return ltrim( $category_option['text'], '- ' );
+			},
+			$category_options
+		);
 
 		wp_send_json_success(
 			array(

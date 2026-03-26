@@ -11,15 +11,29 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 ?>
 <div class="wccg-pricing-rules-form">
+	<?php
+	$eligible_groups = array_values(
+		array_filter(
+			$groups,
+			static function ( $group ) {
+				return isset( $group->group_name ) && $group->group_name !== 'Regular Customers';
+			}
+		)
+	);
+	?>
 	<h2><?php esc_html_e( 'Select Customer Group', 'alynt-customer-groups' ); ?></h2>
-	<label for="group_id" class="screen-reader-text"><?php esc_html_e( 'Customer Group', 'alynt-customer-groups' ); ?></label>
-	<select name="group_id" id="group_id" required>
-		<?php foreach ( $groups as $group ) : ?>
-			<?php if ( $group->group_name !== 'Regular Customers' ) : ?>
+	<?php if ( empty( $eligible_groups ) ) : ?>
+		<div class="notice notice-warning inline">
+			<p><?php esc_html_e( 'Create at least one customer group before adding pricing rules.', 'alynt-customer-groups' ); ?></p>
+		</div>
+	<?php else : ?>
+		<label for="group_id" class="screen-reader-text"><?php esc_html_e( 'Customer Group', 'alynt-customer-groups' ); ?></label>
+		<select name="group_id" id="group_id" required>
+			<?php foreach ( $eligible_groups as $group ) : ?>
 				<option value="<?php echo esc_attr( $group->group_id ); ?>" <?php selected( (int) $form_values['group_id'], (int) $group->group_id ); ?>><?php echo esc_html( $group->group_name ); ?></option>
-			<?php endif; ?>
-		<?php endforeach; ?>
-	</select>
+			<?php endforeach; ?>
+		</select>
+	<?php endif; ?>
 
 	<h2><?php esc_html_e( 'Discount Settings', 'alynt-customer-groups' ); ?></h2>
 	<table class="form-table">
@@ -76,10 +90,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<p class="description"><?php esc_html_e( 'Product-specific rules override category rules. Hold down Ctrl (Windows) or Command (Mac) to select multiple items.', 'alynt-customer-groups' ); ?></p>
 		<select id="product-select" name="product_ids[]" multiple class="wccg-native-select" size="10">
 			<?php foreach ( $all_products as $product ) : ?>
-				<option value="<?php echo esc_attr( $product->get_id() ); ?>" <?php selected( in_array( (int) $product->get_id(), $form_values['product_ids'], true ) ); ?>>
-					<?php echo esc_html( $product->get_name() ); ?>
-					(<?php echo esc_html( get_woocommerce_currency_symbol() . $product->get_regular_price() ); ?>)
-				</option>
+				<option value="<?php echo esc_attr( $product['id'] ); ?>" <?php selected( in_array( (int) $product['id'], $form_values['product_ids'], true ) ); ?>><?php echo esc_html( $product['text'] ); ?></option>
 			<?php endforeach; ?>
 		</select>
 	</div>
@@ -89,11 +100,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<p class="description"><?php esc_html_e( 'Category rules apply to all products in selected categories, including child categories.', 'alynt-customer-groups' ); ?></p>
 		<select id="category-select" name="category_ids[]" multiple class="wccg-native-select" size="10">
 			<?php foreach ( $all_categories as $category ) : ?>
-				<?php $depth = count( get_ancestors( $category->term_id, 'product_cat', 'taxonomy' ) ); ?>
-				<option value="<?php echo esc_attr( $category->term_id ); ?>" <?php selected( in_array( (int) $category->term_id, $form_values['category_ids'], true ) ); ?>><?php echo esc_html( str_repeat( '— ', $depth ) . $category->name ); ?></option>
+				<option value="<?php echo esc_attr( $category['id'] ); ?>" <?php selected( in_array( (int) $category['id'], $form_values['category_ids'], true ) ); ?>><?php echo esc_html( $category['text'] ); ?></option>
 			<?php endforeach; ?>
 		</select>
 	</div>
 
-	<?php submit_button( __( 'Save Pricing Rule', 'alynt-customer-groups' ) ); ?>
+	<?php if ( ! empty( $eligible_groups ) ) : ?>
+		<?php submit_button( __( 'Save Pricing Rule', 'alynt-customer-groups' ) ); ?>
+	<?php endif; ?>
 </div>

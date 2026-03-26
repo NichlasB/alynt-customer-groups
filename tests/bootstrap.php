@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'WCCG_TESTS_PATH', dirname( __DIR__ ) );
-define( 'WCCG_VERSION', '1.1.0' );
+define( 'WCCG_VERSION', '1.2.0' );
 define( 'WCCG_FILE', WCCG_TESTS_PATH . '/alynt-customer-groups.php' );
 define( 'WCCG_PATH', WCCG_TESTS_PATH . '/' );
 define( 'WCCG_URL', 'http://example.test/wp-content/plugins/alynt-customer-groups/' );

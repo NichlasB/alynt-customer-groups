@@ -18,11 +18,54 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Database {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Database|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Map of logical table keys to prefixed database table names.
+	 *
+	 * @var array<string,string>
+	 */
 	private $tables;
+
+	/**
+	 * User-group repository instance.
+	 *
+	 * @var WCCG_User_Group_Repository|null
+	 */
 	private $user_groups;
+
+	/**
+	 * Pricing-rule repository instance.
+	 *
+	 * @var WCCG_Pricing_Rule_Repository|null
+	 */
 	private $pricing_rules;
+
+	/**
+	 * Maintenance repository instance.
+	 *
+	 * @var WCCG_Maintenance_Repository|null
+	 */
 	private $maintenance;
+
+	/**
+	 * Current nested transaction depth.
+	 *
+	 * @var int
+	 */
+	private $transaction_depth = 0;
+
+	/**
+	 * Whether the current transaction should be rolled back at the outermost level.
+	 *
+	 * @var bool
+	 */
+	private $transaction_failed = false;
 
 	/**
 	 * Return the singleton instance of this class.
@@ -38,6 +81,12 @@ class WCCG_Database {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize prefixed table names for all plugin tables.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		global $wpdb;
 
@@ -51,6 +100,12 @@ class WCCG_Database {
 		);
 	}
 
+	/**
+	 * Lazily return the user-group repository instance.
+	 *
+	 * @since  1.0.0
+	 * @return WCCG_User_Group_Repository
+	 */
 	private function user_groups() {
 		if ( ! $this->user_groups ) {
 			$this->user_groups = WCCG_User_Group_Repository::instance();
@@ -59,6 +114,12 @@ class WCCG_Database {
 		return $this->user_groups;
 	}
 
+	/**
+	 * Lazily return the pricing-rule repository instance.
+	 *
+	 * @since  1.0.0
+	 * @return WCCG_Pricing_Rule_Repository
+	 */
 	private function pricing_rules() {
 		if ( ! $this->pricing_rules ) {
 			$this->pricing_rules = WCCG_Pricing_Rule_Repository::instance();
@@ -67,6 +128,12 @@ class WCCG_Database {
 		return $this->pricing_rules;
 	}
 
+	/**
+	 * Lazily return the maintenance repository instance.
+	 *
+	 * @since  1.0.0
+	 * @return WCCG_Maintenance_Repository
+	 */
 	private function maintenance() {
 		if ( ! $this->maintenance ) {
 			$this->maintenance = WCCG_Maintenance_Repository::instance();
@@ -92,11 +159,17 @@ class WCCG_Database {
 	 * @since  1.0.0
 	 * @param  callable $callback Function to execute. Should return a non-false value on success.
 	 * @return mixed Return value of $callback, or false if the transaction was rolled back.
+	 * @throws Exception When a nested repository callback raises an exception.
 	 */
 	public function transaction( $callback ) {
 		global $wpdb;
 
-		$wpdb->query( 'START TRANSACTION' );
+		if ( 0 === $this->transaction_depth ) {
+			$this->transaction_failed = false;
+			$wpdb->query( 'START TRANSACTION' );
+		}
+
+		++$this->transaction_depth;
 
 		try {
 			$result = $callback();
@@ -109,18 +182,31 @@ class WCCG_Database {
 				throw new Exception( $wpdb->last_error );
 			}
 
-			$wpdb->query( 'COMMIT' );
+			--$this->transaction_depth;
+			if ( 0 === $this->transaction_depth ) {
+				if ( $this->transaction_failed ) {
+					$wpdb->query( 'ROLLBACK' );
+					$this->transaction_failed = false;
+					return false;
+				}
+
+				$wpdb->query( 'COMMIT' );
+			}
+
 			return $result;
 		} catch ( Exception $e ) {
-			$wpdb->query( 'ROLLBACK' );
+			$this->transaction_failed = true;
+			--$this->transaction_depth;
+
+			if ( 0 === $this->transaction_depth ) {
+				$wpdb->query( 'ROLLBACK' );
+				$this->transaction_failed = false;
+			}
 
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				WCCG_Logger::instance()->log_error(
 					'Transaction failed: ' . $e->getMessage(),
-					array(
-						'trace'      => $e->getTraceAsString(),
-						'last_query' => $wpdb->last_query,
-					),
+					array(),
 					'critical'
 				);
 			}
@@ -232,13 +318,36 @@ class WCCG_Database {
 	}
 
 	/**
+	 * Prime pricing rule lookups for multiple products in the current request.
+	 *
+	 * @since  1.1.0
+	 * @param  int[] $product_ids WooCommerce product or variation IDs.
+	 * @param  int   $user_id     WordPress user ID (0 for guest).
+	 * @return void
+	 */
+	public function prime_pricing_rules_for_products( $product_ids, $user_id ) {
+		$this->pricing_rules()->prime_pricing_rules_for_products( $product_ids, $user_id );
+	}
+
+	/**
 	 * Fetch pricing rules for the Pricing Rules admin page.
 	 *
 	 * @since  1.0.0
+	 * @param  array $args Optional query arguments including limit and offset.
 	 * @return object[] Array of rules keyed by rule ID.
 	 */
-	public function get_pricing_rules_for_admin_page() {
-		return $this->pricing_rules()->get_pricing_rules_for_admin_page();
+	public function get_pricing_rules_for_admin_page( $args = array() ) {
+		return $this->pricing_rules()->get_pricing_rules_for_admin_page( $args );
+	}
+
+	/**
+	 * Count pricing rules for admin pagination.
+	 *
+	 * @since  1.2.0
+	 * @return int Total number of pricing rules.
+	 */
+	public function count_pricing_rules_for_admin_page() {
+		return $this->pricing_rules()->count_pricing_rules_for_admin_page();
 	}
 
 	/**
@@ -348,6 +457,39 @@ class WCCG_Database {
 	 */
 	public function cleanup_orphaned_data() {
 		return $this->maintenance()->cleanup_orphaned_data();
+	}
+
+	/**
+	 * Remove any group assignment row for a deleted user immediately.
+	 *
+	 * @since  1.2.0
+	 * @param  int $user_id Deleted WordPress user ID.
+	 * @return bool True on success, false on failure.
+	 */
+	public function cleanup_deleted_user_assignment( $user_id ) {
+		return $this->maintenance()->cleanup_deleted_user_assignment( $user_id );
+	}
+
+	/**
+	 * Remove product-rule link rows for a deleted product or variation immediately.
+	 *
+	 * @since  1.2.0
+	 * @param  int $product_id Deleted product or variation ID.
+	 * @return bool True on success, false on failure.
+	 */
+	public function cleanup_deleted_product_rule_links( $product_id ) {
+		return $this->maintenance()->cleanup_deleted_product_rule_links( $product_id );
+	}
+
+	/**
+	 * Remove category-rule link rows for a deleted product category immediately.
+	 *
+	 * @since  1.2.0
+	 * @param  int $category_id Deleted product category term ID.
+	 * @return bool True on success, false on failure.
+	 */
+	public function cleanup_deleted_category_rule_links( $category_id ) {
+		return $this->maintenance()->cleanup_deleted_category_rule_links( $category_id );
 	}
 
 	/**

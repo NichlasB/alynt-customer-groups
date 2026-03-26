@@ -18,8 +18,25 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Core {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Core|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
 	private $db;
+
+	/**
+	 * Utility helper facade.
+	 *
+	 * @var WCCG_Utilities
+	 */
 	private $utils;
 
 	/**
@@ -36,12 +53,24 @@ class WCCG_Core {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize core dependencies and register plugin hooks.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->db    = WCCG_Database::instance();
 		$this->utils = WCCG_Utilities::instance();
 		$this->init_hooks();
 	}
 
+	/**
+	 * Register all cron and cleanup hooks used by the core service.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function init_hooks() {
 		/**
 		 * Fires when the plugin's daily maintenance cron event runs.
@@ -58,6 +87,14 @@ class WCCG_Core {
 		add_action( 'wccg_check_expired_rules', array( $this, 'deactivate_expired_rules' ) );
 
 		/**
+		 * Fires after WordPress is fully loaded so missed expiration checks can be recovered
+		 * even when WP-Cron is disabled or delayed.
+		 *
+		 * @since 1.2.0
+		 */
+		add_action( 'wp_loaded', array( $this, 'maybe_run_expiration_fallback' ) );
+
+		/**
 		 * Fires during every admin request so the daily cleanup cron can be rescheduled if needed.
 		 *
 		 * @since 1.0.0
@@ -70,6 +107,34 @@ class WCCG_Core {
 		 * @since 1.1.0
 		 */
 		add_action( 'admin_init', array( $this, 'verify_expiration_schedule' ) );
+
+		/**
+		 * Fires during admin requests so missed maintenance can recover without waiting for cron.
+		 *
+		 * @since 1.2.0
+		 */
+		add_action( 'admin_init', array( $this, 'maybe_run_cleanup_fallback' ) );
+
+		/**
+		 * Fires after a user is permanently deleted so any group assignment row can be removed immediately.
+		 *
+		 * @since 1.2.0
+		 */
+		add_action( 'deleted_user', array( $this, 'handle_deleted_user' ) );
+
+		/**
+		 * Fires before a post is deleted so product-specific rule links can be removed immediately.
+		 *
+		 * @since 1.2.0
+		 */
+		add_action( 'before_delete_post', array( $this, 'handle_deleted_post' ) );
+
+		/**
+		 * Fires before a term is deleted so product-category rule links can be removed immediately.
+		 *
+		 * @since 1.2.0
+		 */
+		add_action( 'delete_term', array( $this, 'handle_deleted_term' ), 10, 3 );
 	}
 
 	/**
@@ -97,6 +162,42 @@ class WCCG_Core {
 	}
 
 	/**
+	 * Run an on-request expiration check if cron appears delayed.
+	 *
+	 * @since  1.2.0
+	 * @return void
+	 */
+	public function maybe_run_expiration_fallback() {
+		if ( wp_doing_cron() || $this->is_recent_run( 'wccg_last_expiration_check', 10 * MINUTE_IN_SECONDS ) ) {
+			return;
+		}
+
+		$this->run_with_lock(
+			'wccg_expiration_fallback_lock',
+			MINUTE_IN_SECONDS,
+			array( $this, 'deactivate_expired_rules' )
+		);
+	}
+
+	/**
+	 * Run daily maintenance from an admin request if cron appears delayed.
+	 *
+	 * @since  1.2.0
+	 * @return void
+	 */
+	public function maybe_run_cleanup_fallback() {
+		if ( wp_doing_cron() || $this->is_recent_run( 'wccg_last_cleanup', DAY_IN_SECONDS ) ) {
+			return;
+		}
+
+		$this->run_with_lock(
+			'wccg_cleanup_fallback_lock',
+			5 * MINUTE_IN_SECONDS,
+			array( $this, 'run_cleanup_tasks' )
+		);
+	}
+
+	/**
 	 * Deactivate pricing rules whose end_date has passed and clear WooCommerce price caches
 	 * when any rule changes state.
 	 *
@@ -119,30 +220,30 @@ class WCCG_Core {
 			'cache_cleared'     => false,
 		);
 
-		$table         = $wpdb->prefix . 'pricing_rules';
+		$table = $wpdb->prefix . 'pricing_rules';
+
+		/*
+		 * Rule schedule timestamps are stored in UTC, so UTC_TIMESTAMP() keeps the expiry
+		 * comparison timezone-safe regardless of the site's configured local timezone.
+		 */
 		$expired_rules = $wpdb->get_col(
-			/*
-			 * Rule schedule timestamps are stored in UTC, so UTC_TIMESTAMP() keeps the expiry
-			 * comparison timezone-safe regardless of the site's configured local timezone.
-			 */
-			"SELECT rule_id FROM {$table}
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; this query uses a trusted prefixed table name only.
+			'SELECT rule_id FROM ' . $table . '
             WHERE is_active = 1
             AND end_date IS NOT NULL
-            AND end_date < UTC_TIMESTAMP()"
+            AND end_date < UTC_TIMESTAMP()'
 		);
 
 		if ( ! empty( $expired_rules ) ) {
-			$placeholders = implode( ',', array_fill( 0, count( $expired_rules ), '%d' ) );
 			$wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$table} SET is_active = 0 WHERE rule_id IN ($placeholders)",
-					$expired_rules
+					// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; placeholders are used for all dynamic IDs.
+					'UPDATE ' . $table . ' SET is_active = 0 WHERE rule_id IN (' . implode( ',', array_fill( 0, count( $expired_rules ), '%d' ) ) . ')',
+					...$expired_rules
 				)
 			);
 
 			$results['deactivated_count'] = count( $expired_rules );
-			$this->clear_woocommerce_price_caches();
-			$results['cache_cleared'] = true;
 
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				$this->utils->log_error(
@@ -154,42 +255,63 @@ class WCCG_Core {
 		}
 
 		$newly_active_rules = $wpdb->get_col(
-			"SELECT rule_id FROM {$table}
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Table names cannot be parameterized; this query uses a trusted prefixed table name only.
+			'SELECT rule_id FROM ' . $table . '
             WHERE is_active = 1
             AND start_date IS NOT NULL
             AND start_date <= UTC_TIMESTAMP()
             AND start_date > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 7 MINUTE)
-            AND (end_date IS NULL OR end_date >= UTC_TIMESTAMP())"
+            AND (end_date IS NULL OR end_date >= UTC_TIMESTAMP())'
 		);
 
 		if ( ! empty( $newly_active_rules ) ) {
 			$results['activated_count'] = count( $newly_active_rules );
-			if ( ! $results['cache_cleared'] ) {
-				$this->clear_woocommerce_price_caches();
-				$results['cache_cleared'] = true;
-			}
 		}
+
+		$affected_rule_ids = array_values( array_unique( array_merge( $expired_rules, $newly_active_rules ) ) );
+		if ( ! empty( $affected_rule_ids ) ) {
+			$this->clear_woocommerce_price_caches( $affected_rule_ids );
+			$results['cache_cleared'] = true;
+		}
+
+		update_option( 'wccg_last_expiration_check', time() );
 
 		return $results;
 	}
 
-	private function clear_woocommerce_price_caches() {
+	/**
+	 * Clear WooCommerce price caches for the products affected by the supplied rule IDs.
+	 *
+	 * @since  1.2.0
+	 * @param  int[] $rule_ids Pricing rule IDs.
+	 * @return void
+	 */
+	public function refresh_price_caches_for_rule_ids( $rule_ids ) {
+		$rule_ids = array_values( array_unique( array_filter( array_map( 'absint', (array) $rule_ids ) ) ) );
+		if ( empty( $rule_ids ) ) {
+			return;
+		}
+
+		$this->clear_woocommerce_price_caches( $rule_ids );
+	}
+
+	/**
+	 * Clear WooCommerce product transient caches affected by the supplied rule IDs.
+	 *
+	 * @since  1.2.0
+	 * @param  int[] $rule_ids Pricing rule IDs.
+	 * @return void
+	 */
+	private function clear_woocommerce_price_caches( $rule_ids = array() ) {
 		global $wpdb;
 
-		if ( function_exists( 'wc_delete_product_transients' ) ) {
-			$product_ids = $wpdb->get_col(
-				"SELECT DISTINCT product_id FROM {$wpdb->prefix}rule_products"
-			);
+		$rule_ids = array_values( array_unique( array_filter( array_map( 'absint', $rule_ids ) ) ) );
+		if ( function_exists( 'wc_delete_product_transients' ) && ! empty( $rule_ids ) ) {
+			$product_ids = $this->get_affected_product_ids_for_rules( $rule_ids );
 
 			foreach ( $product_ids as $product_id ) {
 				wc_delete_product_transients( $product_id );
 			}
-		}
-
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'woocommerce' );
-		} elseif ( function_exists( 'wp_cache_flush' ) ) {
-			wp_cache_flush();
 		}
 
 		/**
@@ -198,6 +320,55 @@ class WCCG_Core {
 		 * @since 1.0.0
 		 */
 		do_action( 'woocommerce_delete_product_transients' );
+	}
+
+	/**
+	 * Resolve all product IDs affected by the supplied pricing rules.
+	 *
+	 * @since  1.2.0
+	 * @param  int[] $rule_ids Pricing rule IDs.
+	 * @return int[] Unique affected product IDs.
+	 */
+	private function get_affected_product_ids_for_rules( $rule_ids ) {
+		global $wpdb;
+
+		$product_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				'SELECT DISTINCT product_id
+            FROM ' . $wpdb->prefix . 'rule_products
+            WHERE rule_id IN (' . implode( ',', array_fill( 0, count( $rule_ids ), '%d' ) ) . ')',
+				...$rule_ids
+			)
+		);
+
+		$category_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				'SELECT DISTINCT category_id
+            FROM ' . $wpdb->prefix . 'rule_categories
+            WHERE rule_id IN (' . implode( ',', array_fill( 0, count( $rule_ids ), '%d' ) ) . ')',
+				...$rule_ids
+			)
+		);
+
+		$category_ids = array_values( array_unique( array_filter( array_map( 'absint', $category_ids ) ) ) );
+		if ( ! empty( $category_ids ) ) {
+			$category_products = $wpdb->get_col(
+				$wpdb->prepare(
+					'SELECT DISTINCT p.ID
+                FROM ' . $wpdb->posts . ' p
+                JOIN ' . $wpdb->term_relationships . ' tr ON p.ID = tr.object_id
+                JOIN ' . $wpdb->term_taxonomy . ' tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+                WHERE p.post_type = \'product\'
+                AND p.post_status IN (\'publish\', \'private\')
+                AND tt.taxonomy = \'product_cat\'
+                AND tt.term_id IN (' . implode( ',', array_fill( 0, count( $category_ids ), '%d' ) ) . ')',
+					...$category_ids
+				)
+			);
+			$product_ids       = array_merge( $product_ids, $category_products );
+		}
+
+		return array_values( array_unique( array_filter( array_map( 'absint', $product_ids ) ) ) );
 	}
 
 	/**
@@ -228,15 +399,66 @@ class WCCG_Core {
 				);
 			}
 
-			return ! in_array( false, $results, true );
+			$cleanup_succeeded = ! in_array( false, $results, true );
+			if ( $cleanup_succeeded ) {
+				update_option( 'wccg_last_cleanup', time() );
+			}
+
+			return $cleanup_succeeded;
 		} catch ( Exception $e ) {
 			$this->utils->log_error(
 				'Cleanup tasks failed: ' . $e->getMessage(),
-				array( 'trace' => $e->getTraceAsString() ),
+				array(),
 				'critical'
 			);
 			return false;
 		}
+	}
+
+	/**
+	 * Remove a deleted user's group assignment immediately.
+	 *
+	 * @since  1.2.0
+	 * @param  int $user_id Deleted WordPress user ID.
+	 * @return void
+	 */
+	public function handle_deleted_user( $user_id ) {
+		$this->db->cleanup_deleted_user_assignment( $user_id );
+	}
+
+	/**
+	 * Remove product-specific rule links immediately when a product or variation is deleted.
+	 *
+	 * @since  1.2.0
+	 * @param  int $post_id Deleted post ID.
+	 * @return void
+	 */
+	public function handle_deleted_post( $post_id ) {
+		$post_type = get_post_type( $post_id );
+		if ( ! in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
+			return;
+		}
+
+		$this->db->cleanup_deleted_product_rule_links( $post_id );
+	}
+
+	/**
+	 * Remove category-specific rule links immediately when a product category is deleted.
+	 *
+	 * @since  1.2.0
+	 * @param  int    $term_id  Deleted term ID.
+	 * @param  int    $tt_id    Deleted term taxonomy ID.
+	 * @param  string $taxonomy Taxonomy slug.
+	 * @return void
+	 */
+	public function handle_deleted_term( $term_id, $tt_id, $taxonomy ) {
+		unset( $tt_id );
+
+		if ( 'product_cat' !== $taxonomy ) {
+			return;
+		}
+
+		$this->db->cleanup_deleted_category_rule_links( $term_id );
 	}
 
 	/**
@@ -256,10 +478,45 @@ class WCCG_Core {
 
 		return array(
 			'is_scheduled' => (bool) $next_run,
-			'next_run'     => $next_run ? get_date_from_gmt( date( 'Y-m-d H:i:s', $next_run ), 'Y-m-d H:i:s' ) : null,
-			'last_run'     => $last_run ? get_date_from_gmt( date( 'Y-m-d H:i:s', $last_run ), 'Y-m-d H:i:s' ) : null,
+			'next_run'     => $next_run ? get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $next_run ), 'Y-m-d H:i:s' ) : null,
+			'last_run'     => $last_run ? get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $last_run ), 'Y-m-d H:i:s' ) : null,
 			'log_count'    => $this->utils->get_log_count(),
 		);
+	}
+
+	/**
+	 * Determine whether a timestamp option indicates the task ran recently enough.
+	 *
+	 * @since  1.2.0
+	 * @param  string $option_name Option name storing a Unix timestamp.
+	 * @param  int    $interval    Interval in seconds.
+	 * @return bool True when the task ran recently.
+	 */
+	private function is_recent_run( $option_name, $interval ) {
+		$last_run = (int) get_option( $option_name, 0 );
+		return $last_run > 0 && ( time() - $last_run ) < $interval;
+	}
+
+	/**
+	 * Execute a callback under a transient lock to avoid duplicate background work.
+	 *
+	 * @since  1.2.0
+	 * @param  string   $lock_key         Transient key.
+	 * @param  int      $lock_ttl_seconds Lock lifetime in seconds.
+	 * @param  callable $callback         Callback to execute.
+	 * @return void
+	 */
+	private function run_with_lock( $lock_key, $lock_ttl_seconds, $callback ) {
+		if ( get_transient( $lock_key ) ) {
+			return;
+		}
+
+		set_transient( $lock_key, 1, $lock_ttl_seconds );
+		try {
+			call_user_func( $callback );
+		} finally {
+			delete_transient( $lock_key );
+		}
 	}
 
 	/**

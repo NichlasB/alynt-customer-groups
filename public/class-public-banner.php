@@ -19,10 +19,47 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Public_Banner {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Public_Banner|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
 	private $db;
+
+	/**
+	 * Shared utility helper.
+	 *
+	 * @var WCCG_Utilities
+	 */
 	private $utils;
+
+	/**
+	 * Tracks whether the banner already rendered this request.
+	 *
+	 * @var bool
+	 */
 	private $banner_displayed = false;
+
+	/**
+	 * Cache of active-rule checks by group ID.
+	 *
+	 * @var array<int,bool>
+	 */
+	private $active_group_rule_cache = array();
+
+	/**
+	 * Cache of resolved banner titles by user ID.
+	 *
+	 * @var array<int|null|string>
+	 */
+	private $display_title_cache = array();
 
 	/**
 	 * Return the singleton instance of this class.
@@ -38,15 +75,33 @@ class WCCG_Public_Banner {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize banner dependencies.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->db    = WCCG_Database::instance();
 		$this->utils = WCCG_Utilities::instance();
 	}
 
+	/**
+	 * Build a translated banner message for the given context.
+	 *
+	 * @since  1.0.0
+	 * @param  string $message_key Message template key.
+	 * @param  mixed  ...$args     Replacement values for the selected template.
+	 * @return string
+	 */
 	private function get_banner_message( $message_key, ...$args ) {
 		$messages = array(
-			'assigned_group' => __( '%1$s, you receive %2$s pricing on eligible products!', 'alynt-customer-groups' ),
-			'default_group'  => __( 'Enjoy %s pricing on eligible products!', 'alynt-customer-groups' ),
+			'assigned_group' =>
+				/* translators: 1: customer first name, 2: pricing group name wrapped in strong tags. */
+				__( '%1$s, you receive %2$s pricing on eligible products!', 'alynt-customer-groups' ),
+			'default_group'  =>
+				/* translators: %s: pricing group name wrapped in strong tags. */
+				__( 'Enjoy %s pricing on eligible products!', 'alynt-customer-groups' ),
 		);
 
 		return vsprintf( $messages[ $message_key ], $args );
@@ -69,30 +124,28 @@ class WCCG_Public_Banner {
 			$user_id = get_current_user_id();
 		}
 
+		$cache_key = absint( $user_id );
+		if ( array_key_exists( $cache_key, $this->display_title_cache ) ) {
+			return $this->display_title_cache[ $cache_key ];
+		}
+
 		if ( $user_id > 0 ) {
 			$group_name = $this->db->get_user_group_name( $user_id );
 			if ( $group_name ) {
-				return $group_name;
+				$this->display_title_cache[ $cache_key ] = $group_name;
+				return $this->display_title_cache[ $cache_key ];
 			}
 		}
 
 		$default_group_id = get_option( 'wccg_default_group_id', 0 );
 		if ( ! $default_group_id ) {
-			return null;
+			$this->display_title_cache[ $cache_key ] = null;
+			return $this->display_title_cache[ $cache_key ];
 		}
 
-		// Only show the banner if the default group has at least one active rule in the current window.
-		$has_rule = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT 1 FROM {$wpdb->prefix}pricing_rules
-            WHERE group_id = %d AND is_active = 1
-            AND (start_date IS NULL OR start_date <= UTC_TIMESTAMP())
-            AND (end_date IS NULL OR end_date >= UTC_TIMESTAMP())",
-				$default_group_id
-			)
-		);
-		if ( ! $has_rule ) {
-			return null;
+		if ( ! $this->group_has_active_rule( $default_group_id ) ) {
+			$this->display_title_cache[ $cache_key ] = null;
+			return $this->display_title_cache[ $cache_key ];
 		}
 
 		$custom_title = get_option( 'wccg_default_group_custom_title', '' );
@@ -105,7 +158,9 @@ class WCCG_Public_Banner {
 			);
 		}
 
-		return $custom_title ?: null;
+		$this->display_title_cache[ $cache_key ] = ! empty( $custom_title ) ? $custom_title : null;
+
+		return $this->display_title_cache[ $cache_key ];
 	}
 
 	/**
@@ -134,27 +189,22 @@ class WCCG_Public_Banner {
 		}
 	}
 
+	/**
+	 * Render the pricing banner markup when a qualifying group is active.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function render_sticky_banner() {
-		global $wpdb;
-
 		$user_id  = get_current_user_id();
 		$group_id = $user_id ? $this->db->get_user_group( $user_id ) : null;
 		if ( $group_id ) {
 			$user_info  = get_userdata( $user_id );
 			$first_name = $user_info->first_name ? $user_info->first_name : $user_info->display_name;
 			$group_name = $this->db->get_user_group_name( $user_id );
-			$has_rule   = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT 1 FROM {$wpdb->prefix}pricing_rules
-                WHERE group_id = %d AND is_active = 1
-                AND (start_date IS NULL OR start_date <= UTC_TIMESTAMP())
-                AND (end_date IS NULL OR end_date >= UTC_TIMESTAMP())",
-					$group_id
-				)
-			);
+			$has_rule   = $this->group_has_active_rule( $group_id );
 
 			if ( $has_rule && $group_name ) {
-				/* translators: 1: customer first name, 2: pricing group name wrapped in strong tags. */
 				echo '<div class="wccg-sticky-banner">' . wp_kses_post(
 					$this->get_banner_message(
 						'assigned_group',
@@ -168,7 +218,6 @@ class WCCG_Public_Banner {
 
 		$custom_title = $this->get_pricing_group_display_title( $user_id );
 		if ( $custom_title ) {
-			/* translators: %s: pricing group name wrapped in strong tags. */
 			echo '<div class="wccg-sticky-banner">' . wp_kses_post(
 				$this->get_banner_message(
 					'default_group',
@@ -176,5 +225,34 @@ class WCCG_Public_Banner {
 				)
 			) . '</div>';
 		}
+	}
+
+	/**
+	 * Check whether a group has any active pricing rule in the current time window.
+	 *
+	 * @since  1.0.0
+	 * @param  int $group_id Customer group ID.
+	 * @return bool
+	 */
+	private function group_has_active_rule( $group_id ) {
+		global $wpdb;
+
+		$group_id = absint( $group_id );
+		if ( isset( $this->active_group_rule_cache[ $group_id ] ) ) {
+			return $this->active_group_rule_cache[ $group_id ];
+		}
+
+		$this->active_group_rule_cache[ $group_id ] = (bool) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$wpdb->prefix}pricing_rules
+            WHERE group_id = %d AND is_active = 1
+            AND (start_date IS NULL OR start_date <= UTC_TIMESTAMP())
+            AND (end_date IS NULL OR end_date >= UTC_TIMESTAMP())
+            LIMIT 1",
+				$group_id
+			)
+		);
+
+		return $this->active_group_rule_cache[ $group_id ];
 	}
 }

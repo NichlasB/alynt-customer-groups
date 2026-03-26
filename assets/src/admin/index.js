@@ -1,5 +1,4 @@
 import '../../css/admin.css';
-import '../../js/admin.js';
 import { initUserAssignments } from './user-assignments.js';
 import { initCustomerGroups } from './customer-groups.js';
 import { initPricingRulesPage } from './pricing-rules-page.js';

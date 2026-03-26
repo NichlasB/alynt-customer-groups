@@ -1,1 +1,1 @@
-{"version":1,"defects":[],"times":{"Test_Sample::test_plugin_bootstrap_constants_are_defined":0.654}}
+{"version":1,"defects":{"Test_Sample::test_plugin_bootstrap_constants_are_defined":3},"times":{"Test_Sample::test_plugin_bootstrap_constants_are_defined":0.003}}

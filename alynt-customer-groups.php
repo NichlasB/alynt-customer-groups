@@ -3,7 +3,7 @@
  * Plugin Name: Alynt Customer Groups
  * Plugin URI:  https://github.com/NichlasB/alynt-customer-groups
  * Description: Implements custom customer groups and pricing tiers for WooCommerce.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Alynt
  * Author URI: https://alynt.com
  * GitHub Plugin URI: NichlasB/alynt-customer-groups
@@ -15,13 +15,15 @@
  * Requires PHP: 7.4
  * WC requires at least: 5.0
  * WC tested up to: 8.0
+ *
+ * @package Alynt_Customer_Groups
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WCCG_VERSION', '1.1.0' );
+define( 'WCCG_VERSION', '1.2.0' );
 define( 'WCCG_FILE', __FILE__ );
 define( 'WCCG_PATH', plugin_dir_path( WCCG_FILE ) );
 define( 'WCCG_URL', plugin_dir_url( WCCG_FILE ) );
@@ -50,8 +52,25 @@ require_once WCCG_PATH . 'includes/class-core.php';
  * @since   1.0.0
  */
 final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Customer_Groups|null
+	 */
 	private static $instance = null;
+
+	/**
+	 * Plugin bootstrap coordinator.
+	 *
+	 * @var WCCG_Plugin_Bootstrap
+	 */
 	private $bootstrap;
+
+	/**
+	 * Dependency checker and upgrade scheduler.
+	 *
+	 * @var WCCG_Plugin_Dependencies
+	 */
 	private $dependencies;
 
 	/**
@@ -68,6 +87,12 @@ final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
 		return self::$instance;
 	}
 
+	/**
+	 * Initialize bootstrap and dependency services.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
 	private function __construct() {
 		$this->bootstrap    = WCCG_Plugin_Bootstrap::instance();
 		$this->dependencies = WCCG_Plugin_Dependencies::instance();
@@ -137,6 +162,7 @@ final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
 	}
 }
 
+// phpcs:disable Universal.Files.SeparateFunctionsFromOO.Mixed
 /**
  * Return the main plugin instance.
  *
@@ -146,6 +172,7 @@ final class WCCG_Customer_Groups extends WCCG_Plugin_Admin_Notices {
 function WCCG() {
 	return WCCG_Customer_Groups::instance();
 }
+// phpcs:enable Universal.Files.SeparateFunctionsFromOO.Mixed
 
 register_activation_hook( WCCG_FILE, array( 'WCCG_Activator', 'activate' ) );
 register_deactivation_hook( WCCG_FILE, array( 'WCCG_Deactivator', 'deactivate' ) );

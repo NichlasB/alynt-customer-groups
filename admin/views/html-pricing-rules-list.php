@@ -28,17 +28,42 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<th scope="col"><?php esc_html_e( 'Actions', 'alynt-customer-groups' ); ?></th>
 			</tr>
 		</thead>
-		<tbody id="wccg-sortable-rules">
+		<tbody<?php echo ! empty( $rule_order_enabled ) ? ' id="wccg-sortable-rules"' : ''; ?>>
 			<?php foreach ( $pricing_rules_view as $rule ) : ?>
 				<tr data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" class="wccg-sortable-row">
 					<td class="wccg-drag-handle">
-						<span class="dashicons dashicons-menu" aria-hidden="true" title="<?php esc_attr_e( 'Drag to reorder', 'alynt-customer-groups' ); ?>"></span>
-						<button type="button" class="wccg-reorder-btn wccg-reorder-up screen-reader-text" data-direction="up" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="<?php printf( esc_attr__( 'Move rule for %s up', 'alynt-customer-groups' ), $rule['group_name'] ); ?>"><?php esc_html_e( 'Move up', 'alynt-customer-groups' ); ?></button>
-						<button type="button" class="wccg-reorder-btn wccg-reorder-down screen-reader-text" data-direction="down" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="<?php printf( esc_attr__( 'Move rule for %s down', 'alynt-customer-groups' ), $rule['group_name'] ); ?>"><?php esc_html_e( 'Move down', 'alynt-customer-groups' ); ?></button>
+						<?php if ( ! empty( $rule_order_enabled ) ) : ?>
+							<span class="dashicons dashicons-menu" aria-hidden="true" title="<?php esc_attr_e( 'Drag to reorder', 'alynt-customer-groups' ); ?>"></span>
+							<button type="button" class="wccg-reorder-btn wccg-reorder-up screen-reader-text" data-direction="up" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Move rule for %s up', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							"><?php esc_html_e( 'Move up', 'alynt-customer-groups' ); ?></button>
+							<button type="button" class="wccg-reorder-btn wccg-reorder-down screen-reader-text" data-direction="down" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Move rule for %s down', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							"><?php esc_html_e( 'Move down', 'alynt-customer-groups' ); ?></button>
+						<?php else : ?>
+							<span class="dashicons dashicons-lock" aria-hidden="true" title="<?php esc_attr_e( 'Reordering is disabled while pagination is active.', 'alynt-customer-groups' ); ?>"></span>
+							<button type="button" class="screen-reader-text" disabled aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Reordering is unavailable for %s while pagination is active', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							"><?php esc_html_e( 'Reordering unavailable', 'alynt-customer-groups' ); ?></button>
+						<?php endif; ?>
 					</td>
 					<td>
 						<label class="wccg-toggle-switch">
-							<input type="checkbox" class="wccg-rule-toggle" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="<?php printf( esc_attr__( 'Enable rule for %s', 'alynt-customer-groups' ), $rule['group_name'] ); ?>" <?php checked( $rule['is_active'], 1 ); ?>>
+							<input type="checkbox" class="wccg-rule-toggle" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Enable rule for %s', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							" <?php checked( $rule['is_active'], 1 ); ?>>
 							<span class="wccg-toggle-slider"></span>
 						</label>
 						<span class="wccg-status-text"><?php echo $rule['is_active'] ? esc_html__( 'Active', 'alynt-customer-groups' ) : esc_html__( 'Inactive', 'alynt-customer-groups' ); ?></span>
@@ -46,7 +71,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<td><?php echo esc_html( $rule['group_name'] ); ?></td>
 					<td>
 						<?php echo esc_html( ucfirst( $rule['discount_type'] ) ); ?>
-						<?php if ( $rule['discount_type'] === 'fixed' ) : ?>
+						<?php if ( 'fixed' === $rule['discount_type'] ) : ?>
 							<span class="dashicons dashicons-star-filled" aria-hidden="true" title="<?php esc_attr_e( 'Fixed discounts take precedence', 'alynt-customer-groups' ); ?>"></span>
 						<?php endif; ?>
 					</td>
@@ -64,8 +89,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 						<?php endif; ?>
 					</td>
 					<td class="wccg-schedule-cell <?php echo ! $rule['is_active'] ? 'wccg-schedule-inactive' : ''; ?>">
-						<?php echo $rule['schedule']['badge_html']; ?>
-						<?php echo $rule['schedule']['display_html']; ?>
+						<?php echo wp_kses_post( $rule['schedule']['badge_html'] ); ?>
+						<?php echo wp_kses_post( $rule['schedule']['display_html'] ); ?>
 						<?php if ( ! $rule['is_active'] && $rule['schedule']['has_schedule'] ) : ?>
 							<div class="wccg-schedule-warning">
 								<span class="dashicons dashicons-warning" aria-hidden="true"></span>
@@ -76,11 +101,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<td><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $rule['created_at'] ) ) ); ?></td>
 					<td>
 						<div class="wccg-actions-wrapper">
-							<button type="button" class="wccg-edit-rule-btn" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" title="<?php esc_attr_e( 'Edit Rule', 'alynt-customer-groups' ); ?>" aria-label="<?php printf( esc_attr__( 'Edit rule for %s', 'alynt-customer-groups' ), $rule['group_name'] ); ?>">
+							<button type="button" class="wccg-edit-rule-btn" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" title="<?php esc_attr_e( 'Edit Rule', 'alynt-customer-groups' ); ?>" aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Edit rule for %s', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							">
 								<span class="dashicons dashicons-edit" aria-hidden="true"></span>
 								<span class="button-text"><?php esc_html_e( 'Edit', 'alynt-customer-groups' ); ?></span>
 							</button>
-							<button type="button" class="wccg-edit-schedule-btn" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" data-is-active="<?php echo esc_attr( $rule['is_active'] ); ?>" data-start-date="<?php echo esc_attr( $rule['start_date'] ?? '' ); ?>" data-end-date="<?php echo esc_attr( $rule['end_date'] ?? '' ); ?>" title="<?php echo esc_attr( $rule['is_active'] ? __( 'Edit Schedule', 'alynt-customer-groups' ) : __( 'Note: Rule is currently inactive. Enable the toggle for schedule to take effect.', 'alynt-customer-groups' ) ); ?>" aria-label="<?php printf( esc_attr__( 'Edit schedule for %s', 'alynt-customer-groups' ), $rule['group_name'] ); ?>">
+							<button type="button" class="wccg-edit-schedule-btn" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>" data-is-active="<?php echo esc_attr( $rule['is_active'] ); ?>" data-start-date="<?php echo esc_attr( $rule['start_local'] ); ?>" data-end-date="<?php echo esc_attr( $rule['end_local'] ); ?>" title="<?php echo esc_attr( $rule['is_active'] ? __( 'Edit Schedule', 'alynt-customer-groups' ) : __( 'Note: Rule is currently inactive. Enable the toggle for schedule to take effect.', 'alynt-customer-groups' ) ); ?>" aria-label="
+							<?php
+							/* translators: %s: customer group name. */
+							printf( esc_attr__( 'Edit schedule for %s', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+							?>
+							">
 								<span class="dashicons dashicons-calendar-alt" aria-hidden="true"></span>
 								<span class="button-text"><?php esc_html_e( 'Schedule', 'alynt-customer-groups' ); ?></span>
 							</button>
@@ -88,7 +123,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<?php wp_nonce_field( 'wccg_pricing_rules_action', 'wccg_pricing_rules_nonce' ); ?>
 								<input type="hidden" name="action" value="delete_rule">
 								<input type="hidden" name="rule_id" value="<?php echo esc_attr( $rule['rule_id'] ); ?>">
-								<button type="submit" class="button-link-delete" title="<?php esc_attr_e( 'Delete Rule', 'alynt-customer-groups' ); ?>" aria-label="<?php printf( esc_attr__( 'Delete rule for %s', 'alynt-customer-groups' ), $rule['group_name'] ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this pricing rule?', 'alynt-customer-groups' ); ?>');">
+								<button type="submit" class="button-link-delete" title="<?php esc_attr_e( 'Delete Rule', 'alynt-customer-groups' ); ?>" aria-label="
+								<?php
+								/* translators: %s: customer group name. */
+								printf( esc_attr__( 'Delete rule for %s', 'alynt-customer-groups' ), esc_attr( $rule['group_name'] ) );
+								?>
+								" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this pricing rule?', 'alynt-customer-groups' ); ?>');">
 									<span class="dashicons dashicons-trash" aria-hidden="true"></span>
 									<span class="button-text"><?php esc_html_e( 'Delete', 'alynt-customer-groups' ); ?></span>
 								</button>
@@ -122,7 +162,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<button type="button" class="button wccg-cancel-schedule-btn" data-rule-id="<?php echo esc_attr( $rule['rule_id'] ); ?>"><?php esc_html_e( 'Cancel', 'alynt-customer-groups' ); ?></button>
 								<span class="wccg-save-status wccg-schedule-edit-message" role="status" aria-live="polite" aria-atomic="true"></span>
 							</div>
-							<p class="description"><?php printf( esc_html__( 'Leave fields blank to remove schedule restrictions. Times are in %s timezone.', 'alynt-customer-groups' ), '<code>' . esc_html( wp_timezone_string() ) . '</code>' ); ?></p>
+							<p class="description">
+							<?php
+							/* translators: %s: WordPress timezone string wrapped in code tags. */
+							printf( esc_html__( 'Leave fields blank to remove schedule restrictions. Times are in %s timezone.', 'alynt-customer-groups' ), '<code>' . esc_html( wp_timezone_string() ) . '</code>' );
+							?>
+							</p>
 						</div>
 					</td>
 				</tr>
@@ -135,4 +180,47 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</tbody>
 	</table>
 </div>
-
+<?php if ( ! empty( $pagination ) && $pagination['total_pages'] > 1 ) : ?>
+	<?php
+	$pagination_links = paginate_links(
+		array(
+			'base'      => add_query_arg(
+				array(
+					'page'     => 'wccg_pricing_rules',
+					'per_page' => $pagination['per_page'],
+					'paged'    => '%#%',
+				),
+				admin_url( 'admin.php' )
+			),
+			'format'    => '',
+			'current'   => $pagination['current_page'],
+			'total'     => $pagination['total_pages'],
+			'type'      => 'array',
+			'prev_text' => __( '&laquo;', 'alynt-customer-groups' ),
+			'next_text' => __( '&raquo;', 'alynt-customer-groups' ),
+		)
+	);
+	?>
+	<div class="tablenav bottom">
+		<div class="tablenav-pages">
+			<span class="displaying-num">
+				<?php
+				printf(
+					/* translators: 1: first visible item, 2: last visible item, 3: total items. */
+					esc_html__( '%1$d-%2$d of %3$d rules', 'alynt-customer-groups' ),
+					(int) $pagination['from_item'],
+					(int) $pagination['to_item'],
+					(int) $pagination['total_items']
+				);
+				?>
+			</span>
+			<?php if ( ! empty( $pagination_links ) ) : ?>
+				<span class="pagination-links">
+					<?php foreach ( $pagination_links as $pagination_link ) : ?>
+						<?php echo wp_kses_post( $pagination_link ); ?>
+					<?php endforeach; ?>
+				</span>
+			<?php endif; ?>
+		</div>
+	</div>
+<?php endif; ?>

@@ -38,6 +38,33 @@ class WCCG_Admin {
 	 * @var WCCG_Database
 	 */
 	private $db;
+	/**
+	 * Cached product-specific pricing rules keyed by product ID.
+	 *
+	 * @var array<int,array>
+	 */
+	private $product_rule_column_cache = array();
+
+	/**
+	 * Cached category pricing rules keyed by category ID.
+	 *
+	 * @var array<int,array>
+	 */
+	private $category_rule_column_cache = array();
+
+	/**
+	 * Cached product category IDs keyed by product ID.
+	 *
+	 * @var array<int,int[]>
+	 */
+	private $product_category_cache = array();
+
+	/**
+	 * Whether the product list column caches have been primed for the current request.
+	 *
+	 * @var bool
+	 */
+	private $product_rule_cache_primed = false;
 
 	/**
 	 * Return the singleton instance of this class.
@@ -234,17 +261,14 @@ class WCCG_Admin {
 			return;
 		}
 
-		global $wpdb;
-		$product_rules = $this->db->get_product_pricing_rules( $post_id );
+		$this->prime_product_rule_column_cache();
+		$product_rules = isset( $this->product_rule_column_cache[ $post_id ] ) ? $this->product_rule_column_cache[ $post_id ] : array();
 
-		$category_ids   = $this->db->get_all_product_categories( $post_id );
+		$category_ids   = isset( $this->product_category_cache[ $post_id ] ) ? $this->product_category_cache[ $post_id ] : array();
 		$category_rules = array();
-		if ( ! empty( $category_ids ) ) {
-			foreach ( $category_ids as $category_id ) {
-				$category_rules = array_merge(
-					$category_rules,
-					$this->db->get_category_pricing_rules( $category_id )
-				);
+		foreach ( $category_ids as $category_id ) {
+			if ( ! empty( $this->category_rule_column_cache[ $category_id ] ) ) {
+				$category_rules = array_merge( $category_rules, $this->category_rule_column_cache[ $category_id ] );
 			}
 		}
 
@@ -271,6 +295,107 @@ class WCCG_Admin {
 	}
 
 	/**
+	 * Prime product and category rule caches for the current Products list table page.
+	 *
+	 * @since  1.0.0
+	 * @return void
+	 */
+	private function prime_product_rule_column_cache() {
+		global $wp_query, $wpdb;
+
+		if ( $this->product_rule_cache_primed ) {
+			return;
+		}
+
+		$product_ids = array();
+		if ( isset( $wp_query->posts ) && is_array( $wp_query->posts ) ) {
+			foreach ( $wp_query->posts as $post ) {
+				if ( isset( $post->ID ) && isset( $post->post_type ) && 'product' === $post->post_type ) {
+					$product_ids[] = (int) $post->ID;
+				}
+			}
+		}
+
+		$product_ids = array_values( array_unique( array_filter( $product_ids ) ) );
+		if ( empty( $product_ids ) ) {
+			$this->product_rule_cache_primed = true;
+			return;
+		}
+
+		$product_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT rp.product_id, pr.*, g.group_name
+            FROM {$wpdb->prefix}pricing_rules pr
+            JOIN {$wpdb->prefix}rule_products rp ON pr.rule_id = rp.rule_id
+            JOIN {$wpdb->prefix}customer_groups g ON pr.group_id = g.group_id
+            WHERE rp.product_id IN (" . implode( ',', array_fill( 0, count( $product_ids ), '%d' ) ) . ')
+            ORDER BY pr.created_at DESC',
+				...$product_ids
+			)
+		);
+
+		foreach ( $product_rows as $row ) {
+			$product_id = (int) $row->product_id;
+			if ( ! isset( $this->product_rule_column_cache[ $product_id ] ) ) {
+				$this->product_rule_column_cache[ $product_id ] = array();
+			}
+
+			$this->product_rule_column_cache[ $product_id ][] = $row;
+		}
+
+		$terms = wp_get_object_terms( $product_ids, 'product_cat', array( 'fields' => 'all_with_object_id' ) );
+		if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+			$category_ids = array();
+			foreach ( $terms as $term ) {
+				$product_id = isset( $term->object_id ) ? (int) $term->object_id : 0;
+				if ( ! isset( $this->product_category_cache[ $product_id ] ) ) {
+					$this->product_category_cache[ $product_id ] = array();
+				}
+
+				$this->product_category_cache[ $product_id ][] = (int) $term->term_id;
+				$ancestors                                     = array_map( 'intval', get_ancestors( $term->term_id, 'product_cat', 'taxonomy' ) );
+				if ( ! empty( $ancestors ) ) {
+					$this->product_category_cache[ $product_id ] = array_merge( $this->product_category_cache[ $product_id ], $ancestors );
+				}
+
+				$category_ids[] = (int) $term->term_id;
+				$category_ids   = array_merge( $category_ids, $ancestors );
+			}
+
+			foreach ( $this->product_category_cache as $product_id => $product_category_ids ) {
+				$this->product_category_cache[ $product_id ] = array_values( array_unique( array_filter( $product_category_ids ) ) );
+			}
+
+			$category_ids = array_values( array_unique( array_filter( $category_ids ) ) );
+			if ( ! empty( $category_ids ) ) {
+				$category_rows = $wpdb->get_results(
+					$wpdb->prepare(
+						"SELECT rc.category_id, pr.*, g.group_name, t.name AS category_name
+                    FROM {$wpdb->prefix}pricing_rules pr
+                    JOIN {$wpdb->prefix}rule_categories rc ON pr.rule_id = rc.rule_id
+                    JOIN {$wpdb->prefix}customer_groups g ON pr.group_id = g.group_id
+                    JOIN {$wpdb->prefix}terms t ON rc.category_id = t.term_id
+                    WHERE rc.category_id IN (" . implode( ',', array_fill( 0, count( $category_ids ), '%d' ) ) . ')
+                    ORDER BY pr.created_at DESC',
+						...$category_ids
+					)
+				);
+
+				foreach ( $category_rows as $row ) {
+					$category_id = (int) $row->category_id;
+					if ( ! isset( $this->category_rule_column_cache[ $category_id ] ) ) {
+						$this->category_rule_column_cache[ $category_id ] = array();
+					}
+
+					$this->category_rule_column_cache[ $category_id ][] = $row;
+				}
+			}
+		}
+
+		$this->product_rule_cache_primed = true;
+	}
+
+	/**
 	 * Render one pricing rule summary in the product list column.
 	 *
 	 * @since  1.0.0
@@ -287,7 +412,7 @@ class WCCG_Admin {
 			$tooltip .= "\n" . __( 'Category:', 'alynt-customer-groups' ) . ' ' . $category_name;
 		}
 
-		echo '<div class="rule-info" title="' . esc_attr( $tooltip ) . '"><span class="group-name">' . esc_html( $rule->group_name ) . '</span>: <span class="discount">' . esc_html( $discount_text ) . '</span>';
+		echo '<div class="rule-info" title="' . esc_attr( $tooltip ) . '"><span class="group-name">' . esc_html( $rule->group_name ) . '</span>: <span class="discount">' . wp_kses_post( $discount_text ) . '</span>';
 		if ( $rule->discount_type === 'fixed' ) {
 			echo ' <span class="priority-indicator" title="' . esc_attr__( 'Fixed discounts take precedence over percentage discounts', 'alynt-customer-groups' ) . '">&#9733;</span>';
 		}

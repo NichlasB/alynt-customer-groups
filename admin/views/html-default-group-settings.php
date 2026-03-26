@@ -37,7 +37,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<?php if ( $default_group_id > 0 ) : ?>
 						<p class="description">
 							<span class="dashicons dashicons-yes-alt" aria-hidden="true" style="color: #46b450;"></span>
-							<?php printf( esc_html__( 'Currently set to: %s', 'alynt-customer-groups' ), '<strong>' . esc_html( $default_group_name ) . '</strong>' ); ?>
+							<?php
+							/* translators: %s: current default group name wrapped in strong tags. */
+							printf( esc_html__( 'Currently set to: %s', 'alynt-customer-groups' ), '<strong>' . esc_html( $default_group_name ) . '</strong>' );
+							?>
 						</p>
 					<?php endif; ?>
 				</td>
@@ -58,4 +61,3 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php submit_button( __( 'Update Default Group', 'alynt-customer-groups' ), 'primary', '', false ); ?>
 	</form>
 </div>
-

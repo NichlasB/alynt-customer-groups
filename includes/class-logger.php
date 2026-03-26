@@ -21,6 +21,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since   1.0.0
  */
 class WCCG_Logger {
+	/**
+	 * Singleton instance.
+	 *
+	 * @var WCCG_Logger|null
+	 */
 	private static $instance = null;
 
 	/**
@@ -127,11 +132,16 @@ class WCCG_Logger {
 	public function get_log_count() {
 		global $wpdb;
 
-		$table_name   = $wpdb->prefix . 'wccg_error_log';
-		$table_exists = $wpdb->get_var( "SHOW TABLES LIKE '$table_name'" ) === $table_name;
+		$table_name = $wpdb->prefix . 'wccg_error_log';
+
+		$table_exists = $wpdb->get_var(
+			$wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) )
+		) === $table_name;
 
 		if ( $table_exists ) {
-			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table_name" );
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
+			return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . $table_name );
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
 		}
 
 		return 0;

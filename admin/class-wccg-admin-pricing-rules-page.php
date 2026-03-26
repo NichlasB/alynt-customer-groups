@@ -18,6 +18,20 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class WCCG_Admin_Pricing_Rules_Page {
 	/**
+	 * Default row count shown per page in the pricing rules table.
+	 *
+	 * @var int
+	 */
+	private const DEFAULT_PER_PAGE = 25;
+
+	/**
+	 * Allowed per-page options in the pricing rules table.
+	 *
+	 * @var int[]
+	 */
+	private const PER_PAGE_OPTIONS = array( 25, 50, 100 );
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var WCCG_Admin_Pricing_Rules_Page|null
@@ -30,6 +44,13 @@ class WCCG_Admin_Pricing_Rules_Page {
 	 * @var WCCG_Utilities
 	 */
 	private $utils;
+
+	/**
+	 * Database facade.
+	 *
+	 * @var WCCG_Database
+	 */
+	private $db;
 
 	/**
 	 * Pricing rule write service.
@@ -67,6 +88,7 @@ class WCCG_Admin_Pricing_Rules_Page {
 	 */
 	private function __construct() {
 		$this->utils   = WCCG_Utilities::instance();
+		$this->db      = WCCG_Database::instance();
 		$this->writer  = WCCG_Pricing_Rule_Write_Service::instance();
 		$this->actions = WCCG_Admin_Pricing_Rules_Actions::instance();
 
@@ -96,6 +118,23 @@ class WCCG_Admin_Pricing_Rules_Page {
 		wp_enqueue_style( 'dashicons' );
 		wp_enqueue_script( 'jquery-ui-sortable' );
 		wp_enqueue_script( 'wccg-admin-script' );
+		if ( wp_script_is( 'selectWoo', 'registered' ) ) {
+			wp_enqueue_script( 'selectWoo' );
+		} elseif ( wp_script_is( 'select2', 'registered' ) ) {
+			wp_enqueue_script( 'select2' );
+		}
+		if ( wp_style_is( 'select2', 'registered' ) ) {
+			wp_enqueue_style( 'select2' );
+		}
+		if ( ! file_exists( WCCG_PATH . 'assets/dist/admin/index.js' ) ) {
+			wp_enqueue_script(
+				'wccg-pricing-rules-remote',
+				WCCG_URL . 'assets/js/pricing-rules-remote.js',
+				array( 'wccg-admin-script', 'jquery' ),
+				WCCG_VERSION,
+				true
+			);
+		}
 		wp_localize_script(
 			'wccg-admin-script',
 			'wccg_pricing_rules',
@@ -141,7 +180,10 @@ class WCCG_Admin_Pricing_Rules_Page {
 				),
 			)
 		);
-		wp_add_inline_style( 'woocommerce_admin_styles', '.woocommerce select:not(.select2-hidden-accessible) { display: block !important; visibility: visible !important; } .select2-container { display: none !important; }' );
+		$select_script_registered = wp_script_is( 'selectWoo', 'registered' ) || wp_script_is( 'select2', 'registered' );
+		if ( ! $select_script_registered ) {
+			wp_add_inline_style( 'woocommerce_admin_styles', '.woocommerce select:not(.select2-hidden-accessible) { display: block !important; visibility: visible !important; } .select2-container { display: none !important; }' );
+		}
 	}
 
 	/**
@@ -151,30 +193,36 @@ class WCCG_Admin_Pricing_Rules_Page {
 	 * @return void
 	 */
 	public function display_page() {
-		global $wpdb;
-
 		$this->utils->verify_admin_access();
 		$this->actions->handle_form_submission();
 
 		$groups             = $this->db->get_groups();
-		$all_products       = wc_get_products(
-			array(
-				'limit'   => -1,
-				'orderby' => 'title',
-				'order'   => 'ASC',
-			)
-		);
-		$all_categories     = get_terms(
-			array(
-				'taxonomy'   => 'product_cat',
-				'hide_empty' => false,
-				'orderby'    => 'name',
-				'order'      => 'ASC',
-			)
-		);
-		$pricing_rules_view = WCCG_Admin_Pricing_Rules_View_Helper::build_pricing_rules_view( $this->db->get_pricing_rules_for_admin_page() );
-		$conflicts          = $this->writer->get_rule_conflicts();
 		$form_values        = $this->actions->get_form_values();
+		$all_products       = WCCG_Admin_Pricing_Rules_View_Helper::get_product_options_by_ids( $form_values['product_ids'] );
+		$all_categories     = WCCG_Admin_Pricing_Rules_View_Helper::get_category_options_by_ids( $form_values['category_ids'] );
+		$group_names        = WCCG_Admin_Pricing_Rules_View_Helper::get_group_names_by_ids( wp_list_pluck( $groups, 'group_id' ) );
+		$per_page           = $this->get_per_page();
+		$current_page       = $this->get_current_page();
+		$total_rules        = $this->db->count_pricing_rules_for_admin_page();
+		$total_pages        = max( 1, (int) ceil( $total_rules / $per_page ) );
+		$current_page       = min( $current_page, $total_pages );
+		$pricing_rules      = $this->db->get_pricing_rules_for_admin_page(
+			array(
+				'limit'  => $per_page,
+				'offset' => ( $current_page - 1 ) * $per_page,
+			)
+		);
+		$pricing_rules_view = WCCG_Admin_Pricing_Rules_View_Helper::build_pricing_rules_view( $pricing_rules, $group_names );
+		$rule_order_enabled = $total_pages <= 1;
+		$pagination         = $this->get_pagination_args( $current_page, $per_page, $total_rules );
+		$conflicts          = array();
+		$conflicts_notice   = '';
+
+		if ( $total_rules <= 200 ) {
+			$conflicts = $this->writer->get_rule_conflicts( 10 );
+		} elseif ( $total_rules > 0 ) {
+			$conflicts_notice = __( 'Conflict scanning is skipped when the rule list is large to keep this page responsive.', 'alynt-customer-groups' );
+		}
 
 		?>
 		<div class="wrap">
@@ -193,12 +241,55 @@ class WCCG_Admin_Pricing_Rules_Page {
 	}
 
 	/**
-	 * Query pricing rules for display on the admin page.
+	 * Return the current page number for the pricing rules table.
 	 *
-	 * @since  1.0.0
-	 * @return array<int,object> Pricing rules keyed by rule ID.
+	 * @since  1.2.0
+	 * @return int Current page number.
 	 */
-	private function get_pricing_rules() {
-		return $this->db->get_pricing_rules_for_admin_page();
+	private function get_current_page() {
+		$current_page = isset( $_GET['paged'] ) ? absint( sanitize_text_field( wp_unslash( $_GET['paged'] ) ) ) : 1;
+		return max( 1, $current_page );
+	}
+
+	/**
+	 * Return the selected per-page value for the pricing rules table.
+	 *
+	 * @since  1.2.0
+	 * @return int Per-page value.
+	 */
+	private function get_per_page() {
+		$per_page = isset( $_GET['per_page'] ) ? absint( sanitize_text_field( wp_unslash( $_GET['per_page'] ) ) ) : self::DEFAULT_PER_PAGE;
+
+		return in_array( $per_page, self::PER_PAGE_OPTIONS, true ) ? $per_page : self::DEFAULT_PER_PAGE;
+	}
+
+	/**
+	 * Build pagination metadata for the pricing rules table.
+	 *
+	 * @since  1.2.0
+	 * @param  int $current_page Current page number.
+	 * @param  int $per_page     Per-page value.
+	 * @param  int $total_rules  Total pricing rule count.
+	 * @return array
+	 */
+	private function get_pagination_args( $current_page, $per_page, $total_rules ) {
+		$total_pages = max( 1, (int) ceil( $total_rules / $per_page ) );
+		$from_item   = 0;
+		$to_item     = 0;
+
+		if ( $total_rules > 0 ) {
+			$from_item = ( ( $current_page - 1 ) * $per_page ) + 1;
+			$to_item   = min( $current_page * $per_page, $total_rules );
+		}
+
+		return array(
+			'current_page'     => $current_page,
+			'per_page'         => $per_page,
+			'per_page_options' => self::PER_PAGE_OPTIONS,
+			'total_items'      => $total_rules,
+			'total_pages'      => $total_pages,
+			'from_item'        => $from_item,
+			'to_item'          => $to_item,
+		);
 	}
 }
