@@ -12,6 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 ?>
 <?php require WCCG_PATH . 'admin/views/html-pricing-rules-modal.php'; ?>
 <?php require WCCG_PATH . 'admin/views/html-pricing-rules-toolbar.php'; ?>
+<div class="wccg-pricing-rules-top-scroll" aria-hidden="true">
+	<div class="wccg-pricing-rules-top-scroll-inner"></div>
+</div>
 <div class="wccg-pricing-rules-table-wrapper">
 	<table class="wp-list-table widefat fixed striped wccg-pricing-rules-table" aria-label="<?php esc_attr_e( 'Pricing Rules', 'alynt-customer-groups' ); ?>">
 		<thead>

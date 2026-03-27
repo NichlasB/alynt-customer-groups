@@ -5,6 +5,63 @@ export function initPricingRulesPage($) {
         return;
     }
 
+    const $tableWrapper = $('.wccg-pricing-rules-table-wrapper').first();
+    const $table = $tableWrapper.find('.wccg-pricing-rules-table').first();
+    const $topScroll = $('.wccg-pricing-rules-top-scroll').first();
+    const $topScrollInner = $topScroll.find('.wccg-pricing-rules-top-scroll-inner');
+
+    const syncTopScrollbar = () => {
+        if (!$tableWrapper.length || !$table.length || !$topScroll.length || !$topScrollInner.length) {
+            return;
+        }
+
+        const wrapper = $tableWrapper.get(0);
+        const tableWidth = $table.outerWidth() || 0;
+        const hasOverflow = wrapper.scrollWidth > wrapper.clientWidth + 1;
+
+        $topScrollInner.width(tableWidth);
+        $topScroll.toggleClass('is-visible', hasOverflow);
+
+        if (!hasOverflow) {
+            $topScroll.scrollLeft(0);
+        }
+    };
+
+    if ($tableWrapper.length && $topScroll.length) {
+        let isSyncingScroll = false;
+
+        const syncScrollLeft = ($source, $target) => {
+            if (isSyncingScroll) {
+                return;
+            }
+
+            isSyncingScroll = true;
+            $target.scrollLeft($source.scrollLeft());
+            window.requestAnimationFrame(() => {
+                isSyncingScroll = false;
+            });
+        };
+
+        $topScroll.off('scroll.wccgTopScroll').on('scroll.wccgTopScroll', function() {
+            syncScrollLeft($(this), $tableWrapper);
+        });
+
+        $tableWrapper.off('scroll.wccgTopScroll').on('scroll.wccgTopScroll', function() {
+            syncScrollLeft($(this), $topScroll);
+        });
+
+        $(window).off('resize.wccgTopScroll').on('resize.wccgTopScroll', syncTopScrollbar);
+
+        if (typeof window.ResizeObserver === 'function' && !$tableWrapper.data('wccgTopScrollObserver')) {
+            const resizeObserver = new window.ResizeObserver(syncTopScrollbar);
+            resizeObserver.observe($tableWrapper.get(0));
+            resizeObserver.observe($table.get(0));
+            $tableWrapper.data('wccgTopScrollObserver', resizeObserver);
+        }
+
+        syncTopScrollbar();
+    }
+
     const getFriendlyError = (jqXHR, fallbackMessage) => {
         if (jqXHR && jqXHR.status === 403) {
             return strings.session_expired || 'Your session has expired. Reload the page and try again.';
