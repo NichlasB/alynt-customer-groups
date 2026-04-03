@@ -11,3 +11,7 @@ composer.phar
 *.map
 .DS_Store
 Thumbs.db
+
+# Local-only workflow files
+deploy.sh
+session-context.tmp.md

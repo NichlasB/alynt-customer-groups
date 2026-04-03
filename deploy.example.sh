@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copy this file to deploy.sh and customize deploy.sh locally.
+# Keep deploy.sh gitignored; commit only deploy.example.sh.
 set -e
 
 REMOTE_HOST="your-ssh-alias"
@@ -32,6 +34,8 @@ rsync -avz --delete \
   --exclude='phpunit.xml' \
   --exclude='phpunit.xml.dist' \
   --exclude='deploy.sh' \
+  --exclude='deploy.example.sh' \
+  --exclude='session-context.tmp.md' \
   --exclude='README.md' \
   --exclude='CHANGELOG.md' \
   --exclude='*.map' \
